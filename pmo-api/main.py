@@ -313,6 +313,7 @@ def all_risks():
                 "id": risk.id,
                 "project_id": risk.project_id,
                 "project_name": projects.get(risk.project_id).name if projects.get(risk.project_id) else "未知项目",
+                "wekan_board_id": projects.get(risk.project_id).wekan_board_id if projects.get(risk.project_id) else None,
                 "title": risk.title,
                 "level": risk.level,
                 "owner": risk.owner,
