@@ -548,13 +548,79 @@ function currentStageFrom(stages){
     || stages[0];
 }
 
+function readLegacyLocal(type){
+  if(!boardId) return [];
+  try{
+    const data=JSON.parse(localStorage.getItem('yu_pmo_'+type+'_'+boardId)||'[]');
+    return Array.isArray(data)?data:[];
+  }catch(e){
+    return [];
+  }
+}
+
+async function restoreLegacyStagesIfNeeded(pid, current){
+  if(Array.isArray(current) && current.length) return current;
+  const legacy=readLegacyLocal('stages');
+  if(!legacy.length) return current||[];
+
+  for(let i=0;i<legacy.length;i++){
+    const s=legacy[i];
+    try{
+      await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/stages',{
+        method:'POST',
+        body:JSON.stringify({
+          name:s.name||('阶段 '+(i+1)),
+          status:s.status||'pending',
+          planned_due_date:s.date||s.planned_due_date||null,
+          sort_order:i
+        })
+      });
+    }catch(e){}
+  }
+  try{
+    const refreshed=await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/stages');
+    return Array.isArray(refreshed)?refreshed:[];
+  }catch(e){
+    return current||[];
+  }
+}
+
+async function restoreLegacyRisksIfNeeded(pid, current){
+  if(Array.isArray(current) && current.length) return current;
+  const legacy=readLegacyLocal('risks');
+  if(!legacy.length) return current||[];
+
+  for(const r of legacy){
+    try{
+      await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/risks',{
+        method:'POST',
+        body:JSON.stringify({
+          title:r.title||'未命名风险',
+          level:r.level||'mid',
+          owner:r.owner||null,
+          status:r.status||'open',
+          source:'legacy-local'
+        })
+      });
+    }catch(e){}
+  }
+  try{
+    const refreshed=await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/risks');
+    return Array.isArray(refreshed)?refreshed:[];
+  }catch(e){
+    return current||[];
+  }
+}
+
 async function loadProjectCoreData(){
   const pid=await resolveProjectIdentity();
   if(!pid) throw new Error('PROJECT_ID_UNAVAILABLE');
-  const [stages,risks]=await Promise.all([
+  let [stages,risks]=await Promise.all([
     pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/stages'),
     pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/risks')
   ]);
+  stages=await restoreLegacyStagesIfNeeded(pid,stages);
+  risks=await restoreLegacyRisksIfNeeded(pid,risks);
   stageItems=Array.isArray(stages)?stages:[];
   riskItems=Array.isArray(risks)?risks:[];
   return {stages:stageItems,risks:riskItems};
@@ -589,6 +655,7 @@ async function renderStages(){
   try{
     const pid=await resolveProjectIdentity();
     stageItems=await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/stages');
+    stageItems=await restoreLegacyStagesIfNeeded(pid,stageItems);
     list.innerHTML=stageItems.map(s=>{
       const statusText=s.status==='done'?'已完成':s.status==='active'?'进行中':'未开始';
       const cls=s.status==='done'?'done':s.status==='active'?'active':'';
@@ -646,6 +713,7 @@ async function renderRisks(){
   try{
     const pid=await resolveProjectIdentity();
     riskItems=await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/risks');
+    riskItems=await restoreLegacyRisksIfNeeded(pid,riskItems);
     list.innerHTML=riskItems.map(r=>{
       const levelText=r.level==='high'?'高风险':r.level==='mid'?'中风险':'低风险';
       const levelCls=r.level==='high'?'risk-high':r.level==='mid'?'risk-mid':'risk-low';
