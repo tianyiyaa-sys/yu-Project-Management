@@ -243,6 +243,7 @@ document.getElementById('tabStages').href = projectUrl('stages');
 document.getElementById('tabRisks').href = projectUrl('risks');
 
 if(title){
+  if(boardId) localStorage.setItem('yu_pmo_project_title_' + boardId, title);
   document.getElementById('projectTitle').textContent = title;
   document.title = title + ' - 雨诺项目工作台';
   document.getElementById('projectSubtitle').textContent = 'Wekan 项目已关联；经营与风险数据按接入进度逐步补齐。';
