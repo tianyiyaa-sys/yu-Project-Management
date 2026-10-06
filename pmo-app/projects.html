@@ -137,19 +137,39 @@ function currentStageFrom(stages){
     || [...stages].reverse().find(s=>s.status==='done')
     || stages[0];
 }
-function renderBoards(boards){
+async function ensurePmoProject(boardId, name){
+  try{
+    const res = await fetch('/api/projects/sync-wekan',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({board_id:boardId,name})
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const project = await res.json();
+    localStorage.setItem('yu_pmo_project_id_' + boardId, project.id);
+    return project;
+  }catch(e){
+    return null;
+  }
+}
+async function renderBoards(boards){
   const active = boards.filter(b => !b.archived && (b.type === undefined || b.type === 'board'));
-  $('projectRows').innerHTML = active.map(b => {
+  const rows = await Promise.all(active.map(async b => {
     const rawId = b._id || b.id || '';
     const id = encodeURIComponent(rawId);
-    const title = esc(b.title || b.name || '未命名项目');
     const rawTitle = b.title || b.name || '未命名项目';
+    const title = esc(rawTitle);
     localStorage.setItem('yu_pmo_project_title_' + rawId, rawTitle);
-    const url = 'project.html?boardId=' + id + '&title=' + encodeURIComponent(rawTitle);
+
+    const pmoProject = await ensurePmoProject(rawId, rawTitle);
+    const projectId = pmoProject?.id || localStorage.getItem('yu_pmo_project_id_' + rawId) || '';
+    const url = 'project.html?projectId=' + encodeURIComponent(projectId) + '&boardId=' + id + '&title=' + encodeURIComponent(rawTitle);
+
     const stages = loadLocal('stages', rawId);
     const risks = loadLocal('risks', rawId);
     const currentStage = currentStageFrom(stages);
     const highRiskCount = risks.filter(r=>r.level==='high' && r.status!=='closed').length;
+
     return '<tr>' +
       '<td><a class="project-link" href="' + url + '">' + title + '</a></td>' +
       '<td><span class="state"><i></i>执行中</span></td>' +
@@ -162,7 +182,9 @@ function renderBoards(boards){
       '<td>' + (highRiskCount ? '<span class="badge danger">高风险 ' + highRiskCount + '</span>' : '--') + '</td>' +
       '<td>--</td>' +
     '</tr>';
-  }).join('');
+  }));
+
+  $('projectRows').innerHTML = rows.join('');
   $('emptyState').style.display = active.length ? 'none' : '';
   if(!active.length){
     $('emptyState').innerHTML = '<strong>当前没有可同步的 Wekan 看板</strong>你可以先在 Wekan 新建一个项目看板，再回这里刷新。';
@@ -191,7 +213,7 @@ async function loadBoards(){
     }
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    renderBoards(normaliseBoards(data));
+    await renderBoards(normaliseBoards(data));
   }catch(err){
     setConnected(false);
     $('emptyState').style.display = '';
