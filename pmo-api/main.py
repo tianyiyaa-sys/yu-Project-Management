@@ -536,23 +536,51 @@ def delete_decision(item_id: str):
 
 @app.post("/api/projects/{project_id}/migrate-local")
 def migrate_local(project_id: str, payload: LegacyMigrationIn):
+    """
+    Idempotent compatibility migration from the old browser-local prototype.
+    This endpoint can be called repeatedly. It only inserts legacy records
+    that are not already represented in the PMO database.
+    """
     with SessionLocal() as session:
         project = require_project(session, project_id)
-        if project.legacy_migrated_at:
-            return {"ok": True, "already_migrated": True}
 
+        added = {"stages": 0, "risks": 0, "materials": 0, "decisions": 0}
+
+        existing_stages = list(session.scalars(
+            select(Stage).where(Stage.project_id == project_id)
+        ))
         for index, x in enumerate(payload.stages):
-            session.add(Stage(
+            exists = any(
+                s.name == x.name
+                and s.planned_due_date == x.date
+                for s in existing_stages
+            )
+            if exists:
+                continue
+            item = Stage(
                 id=str(uuid.uuid4()),
                 project_id=project_id,
                 name=x.name,
                 status=x.status,
                 planned_due_date=x.date,
                 sort_order=index,
-            ))
+            )
+            session.add(item)
+            existing_stages.append(item)
+            added["stages"] += 1
 
+        existing_risks = list(session.scalars(
+            select(Risk).where(Risk.project_id == project_id)
+        ))
         for x in payload.risks:
-            session.add(Risk(
+            exists = any(
+                r.title == x.title
+                and (r.owner or "") == (x.owner or "")
+                for r in existing_risks
+            )
+            if exists:
+                continue
+            item = Risk(
                 id=str(uuid.uuid4()),
                 project_id=project_id,
                 title=x.title,
@@ -561,10 +589,23 @@ def migrate_local(project_id: str, payload: LegacyMigrationIn):
                 status=x.status,
                 source="legacy-local",
                 created_at=x.createdAt or datetime.utcnow(),
-            ))
+            )
+            session.add(item)
+            existing_risks.append(item)
+            added["risks"] += 1
 
+        existing_materials = list(session.scalars(
+            select(Material).where(Material.project_id == project_id)
+        ))
         for x in payload.materials:
-            session.add(Material(
+            exists = any(
+                m.name == x.name
+                and (m.link or "") == (x.link or "")
+                for m in existing_materials
+            )
+            if exists:
+                continue
+            item = Material(
                 id=str(uuid.uuid4()),
                 project_id=project_id,
                 name=x.name,
@@ -572,10 +613,23 @@ def migrate_local(project_id: str, payload: LegacyMigrationIn):
                 link=x.link,
                 note=x.note,
                 created_at=x.createdAt or datetime.utcnow(),
-            ))
+            )
+            session.add(item)
+            existing_materials.append(item)
+            added["materials"] += 1
 
+        existing_decisions = list(session.scalars(
+            select(Decision).where(Decision.project_id == project_id)
+        ))
         for x in payload.decisions:
-            session.add(Decision(
+            exists = any(
+                d.decision == x.decision
+                and (d.meeting_name or "") == (x.name or "")
+                for d in existing_decisions
+            )
+            if exists:
+                continue
+            item = Decision(
                 id=str(uuid.uuid4()),
                 project_id=project_id,
                 meeting_name=x.name,
@@ -585,18 +639,17 @@ def migrate_local(project_id: str, payload: LegacyMigrationIn):
                 due_date=x.deadline,
                 status=x.status,
                 created_at=x.createdAt or datetime.utcnow(),
-            ))
+            )
+            session.add(item)
+            existing_decisions.append(item)
+            added["decisions"] += 1
 
         project.legacy_migrated_at = datetime.utcnow()
         project.updated_at = datetime.utcnow()
         session.commit()
+
         return {
             "ok": True,
-            "already_migrated": False,
-            "migrated": {
-                "stages": len(payload.stages),
-                "risks": len(payload.risks),
-                "materials": len(payload.materials),
-                "decisions": len(payload.decisions),
-            },
+            "migrated": added,
+            "legacy_migrated_at": project.legacy_migrated_at,
         }
