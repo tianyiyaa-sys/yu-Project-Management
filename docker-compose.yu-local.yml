@@ -1,3 +1,5 @@
+name: yu-project-management-yu-pmo-v1
+
 services:
   wekan:
     image: yu-project-management:local
