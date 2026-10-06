@@ -257,6 +257,74 @@ def health():
     return {"ok": True, "service": "yu-pmo-api", "version": "0.2.0"}
 
 
+
+
+
+@app.get("/api/project-summaries")
+def project_summaries():
+    with SessionLocal() as session:
+        projects = list(session.scalars(select(Project).order_by(Project.created_at.desc())))
+        result = []
+        for project in projects:
+            stages = list(session.scalars(
+                select(Stage).where(Stage.project_id == project.id).order_by(Stage.sort_order, Stage.created_at)
+            ))
+            risks = list(session.scalars(select(Risk).where(Risk.project_id == project.id)))
+            decisions = list(session.scalars(select(Decision).where(Decision.project_id == project.id)))
+
+            current_stage = (
+                next((x for x in stages if x.status == "active"), None)
+                or next((x for x in stages if x.status == "pending"), None)
+                or next((x for x in reversed(stages) if x.status == "done"), None)
+            )
+            high_risks = [x for x in risks if x.level == "high" and x.status != "closed"]
+            open_decisions = [x for x in decisions if x.status != "done"]
+
+            result.append({
+                "project_id": project.id,
+                "name": project.name,
+                "status": project.status,
+                "customer": project.customer,
+                "manager": project.manager,
+                "project_type": project.project_type,
+                "wekan_board_id": project.wekan_board_id,
+                "rbc_project_id": project.rbc_project_id,
+                "current_stage": current_stage.name if current_stage else None,
+                "high_risk_count": len(high_risks),
+                "risk_count": len([x for x in risks if x.status != "closed"]),
+                "open_decision_count": len(open_decisions),
+            })
+        return result
+
+
+@app.get("/api/risks")
+def all_risks():
+    with SessionLocal() as session:
+        risks = list(session.scalars(select(Risk).order_by(Risk.created_at.desc())))
+        project_ids = {x.project_id for x in risks}
+        projects = {}
+        for project_id in project_ids:
+            project = session.get(Project, project_id)
+            if project:
+                projects[project_id] = project
+
+        return [
+            {
+                "id": risk.id,
+                "project_id": risk.project_id,
+                "project_name": projects.get(risk.project_id).name if projects.get(risk.project_id) else "未知项目",
+                "title": risk.title,
+                "level": risk.level,
+                "owner": risk.owner,
+                "status": risk.status,
+                "due_date": risk.due_date,
+                "source": risk.source,
+                "created_at": risk.created_at,
+            }
+            for risk in risks
+        ]
+
+
 @app.get("/api/projects", response_model=list[ProjectOut])
 def list_projects():
     with SessionLocal() as session:
