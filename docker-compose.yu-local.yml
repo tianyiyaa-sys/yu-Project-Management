@@ -21,6 +21,39 @@ services:
     ports: !override
       - "127.0.0.1:27017:27017"
 
+  pmo-db:
+    image: docker.m.daocloud.io/library/postgres:16-alpine
+    container_name: yu-pmo-db
+    restart: always
+    environment:
+      POSTGRES_DB: yu_pmo
+      POSTGRES_USER: yu_pmo
+      POSTGRES_PASSWORD: yu_pmo_local_only
+    volumes:
+      - pmo-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yu_pmo -d yu_pmo"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - wekan-tier
+
+  pmo-api:
+    image: yu-project-management-pmo-api:local
+    build:
+      context: .
+      dockerfile: Dockerfile.pmo-api
+    container_name: yu-pmo-api
+    restart: always
+    environment:
+      DATABASE_URL: postgresql+psycopg://yu_pmo:yu_pmo_local_only@pmo-db:5432/yu_pmo
+    depends_on:
+      pmo-db:
+        condition: service_healthy
+    networks:
+      - wekan-tier
+
   pmo:
     image: yu-project-management-pmo:local
     build:
@@ -28,7 +61,12 @@ services:
       dockerfile: Dockerfile.pmo
     container_name: yu-pmo-app
     restart: always
+    depends_on:
+      - pmo-api
     ports:
       - "3100:80"
     networks:
       - wekan-tier
+
+volumes:
+  pmo-postgres-data:
