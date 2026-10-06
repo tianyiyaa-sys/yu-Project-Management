@@ -211,7 +211,7 @@
       font-size:12px;
       color:#4f5560;
     }
-    .project-name{font-weight:700;color:#20242b}
+    .project-name{font-weight:700;color:#20242b}.project-link{font-weight:700;color:#20242b;text-decoration:none}.project-link:hover{color:var(--accent)}.badge.danger{background:#fff0f0;color:#c44d4d}
     .state{
       display:inline-flex;align-items:center;gap:6px;
       font-size:11px;color:#5f6570;
@@ -343,7 +343,7 @@
 
     <div class="connection-row">
       <span class="chip ok"><span class="chip-dot"></span>PMO 已运行</span>
-      <span class="chip ok"><span class="chip-dot"></span>Wekan 已连接</span>
+      <span class="chip" id="homeWekanChip"><span class="chip-dot"></span><span id="homeWekanText">Wekan 未连接</span></span>
       <span class="chip"><span class="chip-dot"></span>RBC 待接入</span>
       <span class="chip"><span class="chip-dot"></span>小雨 AI 待接入</span>
     </div>
@@ -351,13 +351,13 @@
     <section class="metrics">
       <div class="metric">
         <div class="metric-label">当前项目</div>
-        <div class="metric-value">0</div>
-        <div class="metric-note">下一步从 Wekan 自动同步</div>
+        <div class="metric-value" id="homeProjectCount">0</div>
+        <div class="metric-note">来自 Wekan 可见项目</div>
       </div>
       <div class="metric">
         <div class="metric-label">高风险项目</div>
-        <div class="metric-value">--</div>
-        <div class="metric-note">风险规则接入后计算</div>
+        <div class="metric-value" id="homeHighRiskCount">0</div>
+        <div class="metric-note">存在未关闭高风险的项目</div>
       </div>
       <div class="metric">
         <div class="metric-label">合同 / 回款</div>
@@ -387,10 +387,10 @@
                 <th>项目</th><th>状态</th><th>阶段</th><th>进度</th><th>投入</th><th>回款</th><th>风险</th><th>健康度</th>
               </tr>
             </thead>
-            <tbody></tbody>
+            <tbody id="homeProjectRows"></tbody>
           </table>
         </div>
-        <div class="empty">还没有同步项目。下一步会把 Wekan 看板自动映射为项目。</div>
+        <div class="empty" id="homeProjectEmpty">尚未读取项目。请先在项目中心连接 Wekan。</div>
       </section>
 
       <section class="panel">
@@ -401,6 +401,7 @@
           </div>
         </div>
         <div class="attention-list">
+          <div id="homeRiskAttention"></div>
           <div class="attention">
             <div class="attention-top"><strong>项目执行层已就绪</strong><span class="badge">Wekan</span></div>
             <span>后续任务、负责人、截止时间继续由 Wekan 承担。</span>
@@ -426,5 +427,98 @@
     <div class="footer">V0.1 · 本地产品验收版</div>
   </main>
 </div>
+<script>
+const HOME_TOKEN_KEY='yu_wekan_token';
+const HOME_USER_KEY='yu_wekan_user_id';
+
+function homeEsc(value){
+  return String(value ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s]));
+}
+function homeNormaliseBoards(data){
+  if(Array.isArray(data)) return data;
+  if(Array.isArray(data?.boards)) return data.boards;
+  if(Array.isArray(data?.data)) return data.data;
+  return [];
+}
+function homeLoadLocal(type,boardId){
+  try{return JSON.parse(localStorage.getItem('yu_pmo_'+type+'_'+boardId)||'[]')}catch(e){return []}
+}
+function homeCurrentStage(stages){
+  if(!Array.isArray(stages)||!stages.length) return null;
+  return stages.find(s=>s.status==='active')
+    || stages.find(s=>s.status==='pending')
+    || [...stages].reverse().find(s=>s.status==='done')
+    || stages[0];
+}
+function setHomeWekan(ok,text){
+  const chip=document.getElementById('homeWekanChip');
+  chip.classList.toggle('ok',ok);
+  document.getElementById('homeWekanText').textContent=text;
+}
+function renderHomeBoards(boards){
+  const active=boards.filter(b=>!b.archived&&(b.type===undefined||b.type==='board'));
+  document.getElementById('homeProjectCount').textContent=active.length;
+
+  let highRiskProjects=0;
+  const riskAttention=[];
+  document.getElementById('homeProjectRows').innerHTML=active.map(b=>{
+    const boardId=b._id||b.id||'';
+    const title=b.title||b.name||'未命名项目';
+    const stages=homeLoadLocal('stages',boardId);
+    const risks=homeLoadLocal('risks',boardId);
+    const current=homeCurrentStage(stages);
+    const highRisks=risks.filter(r=>r.level==='high'&&r.status!=='closed');
+    if(highRisks.length){
+      highRiskProjects++;
+      riskAttention.push({boardId,title,risks:highRisks});
+    }
+    const url='project.html?boardId='+encodeURIComponent(boardId)+'&title='+encodeURIComponent(title);
+    return '<tr>'+
+      '<td><a class="project-link" href="'+url+'">'+homeEsc(title)+'</a></td>'+
+      '<td><span class="state running"><i></i>执行中</span></td>'+
+      '<td>'+(current?homeEsc(current.name):'<span class="placeholder">待录入</span>')+'</td>'+
+      '<td>--</td>'+
+      '<td><span class="placeholder">RBC待接入</span></td>'+
+      '<td><span class="placeholder">RBC待接入</span></td>'+
+      '<td>'+(highRisks.length?'<span class="badge danger">高风险 '+highRisks.length+'</span>':'--')+'</td>'+
+      '<td>--</td>'+
+    '</tr>';
+  }).join('');
+
+  document.getElementById('homeHighRiskCount').textContent=highRiskProjects;
+  document.getElementById('homeProjectEmpty').style.display=active.length?'none':'';
+
+  const riskBox=document.getElementById('homeRiskAttention');
+  riskBox.innerHTML=riskAttention.slice(0,5).map(p=>{
+    const first=p.risks[0];
+    const url='project.html?boardId='+encodeURIComponent(p.boardId)+'&title='+encodeURIComponent(p.title)+'&tab=risks';
+    return '<div class="attention">'+
+      '<div class="attention-top"><strong>'+homeEsc(p.title)+'</strong><span class="badge danger">高风险 '+p.risks.length+'</span></div>'+
+      '<span>'+homeEsc(first.title)+' · <a href="'+url+'" style="color:#4b6bfb;text-decoration:none">查看风险</a></span>'+
+    '</div>';
+  }).join('');
+}
+async function loadHome(){
+  const token=sessionStorage.getItem(HOME_TOKEN_KEY);
+  const userId=sessionStorage.getItem(HOME_USER_KEY);
+  if(!token||!userId){
+    setHomeWekan(false,'Wekan 未连接');
+    return;
+  }
+  try{
+    const res=await fetch('/wekan/api/users/'+encodeURIComponent(userId)+'/boards',{
+      headers:{Authorization:'Bearer '+token}
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const boards=homeNormaliseBoards(await res.json());
+    setHomeWekan(true,'Wekan 已连接');
+    renderHomeBoards(boards);
+  }catch(e){
+    setHomeWekan(false,'Wekan 连接失效');
+    document.getElementById('homeProjectEmpty').textContent='暂时无法读取 Wekan 项目，请回项目中心重新连接。';
+  }
+}
+loadHome();
+</script>
 </body>
 </html>
