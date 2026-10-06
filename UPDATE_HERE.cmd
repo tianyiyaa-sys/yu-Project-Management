@@ -1,15 +1,15 @@
 @echo off
 setlocal
 chcp 65001 >nul
-title Yu Project Management - Update
+title Yu PMO - Quick Update
 cd /d "%~dp0"
 
 echo ========================================
-echo   Yu Project Management - Update
+echo   Yu PMO - Quick Update
 echo ========================================
 echo.
-echo No Git knowledge is required.
-echo This updater downloads the latest yu-pmo-v1 ZIP automatically.
+echo This update only rebuilds the PMO workbench.
+echo Wekan stays running and will not be rebuilt.
 echo.
 pause
 
@@ -24,7 +24,7 @@ if exist "%ZIP%" del /q "%ZIP%"
 mkdir "%WORK%" >nul 2>&1
 
 echo.
-echo [2/5] Downloading latest code from GitHub...
+echo [2/5] Downloading latest PMO code...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri 'https://github.com/tianyiyaa-sys/yu-Project-Management/archive/refs/heads/yu-pmo-v1.zip' -OutFile '%ZIP%'"
 if errorlevel 1 (
@@ -50,12 +50,23 @@ if errorlevel 1 (
 )
 
 echo.
-echo [4/5] Rebuilding latest version...
+echo [4/5] Rebuilding PMO only...
 pushd "%SRC%"
-docker compose -f docker-compose.yml -f docker-compose.yu-local.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.yu-local.yml build pmo
 if errorlevel 1 (
   echo.
-  echo ERROR: Docker rebuild failed.
+  echo ERROR: PMO build failed.
+  echo Please take a screenshot and send it to ChatGPT.
+  echo.
+  popd
+  pause
+  exit /b 1
+)
+
+docker compose -f docker-compose.yml -f docker-compose.yu-local.yml up -d --no-deps pmo
+if errorlevel 1 (
+  echo.
+  echo ERROR: PMO startup failed.
   echo Please take a screenshot and send it to ChatGPT.
   echo.
   popd
@@ -64,13 +75,13 @@ if errorlevel 1 (
 )
 
 echo.
-echo [5/5] Update complete.
-timeout /t 8 /nobreak >nul
-start "" "http://localhost:3000"
+echo [5/5] Done. Opening PMO workbench...
+timeout /t 2 /nobreak >nul
+start "" "http://localhost:3100"
 
 echo.
-echo The newest version is running.
-echo Your Docker data is kept in the same local volume.
+echo PMO updated successfully.
+echo Wekan is still available at http://localhost:3000
 echo.
 popd
 pause
