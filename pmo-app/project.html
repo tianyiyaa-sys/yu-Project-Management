@@ -159,7 +159,7 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
   <div id="stagesView" class="view-hidden">
     <section class="panel">
       <div class="panel-title">阶段管理</div>
-      <div class="panel-sub">用于记录项目真实推进阶段。当前先保存在本机浏览器，后续迁移到正式项目数据库。</div>
+      <div class="panel-sub">用于记录项目真实推进阶段。数据已保存到 PMO 项目数据库。</div>
 
       <div class="form-row">
         <div class="field"><label>阶段名称</label><input id="stageName" placeholder="例如：需求调研 / 蓝图确认 / 上线准备"></div>
@@ -176,7 +176,7 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
 
       <div class="stage-list" id="stageList"></div>
       <div class="empty" id="stageEmpty"><strong>还没有阶段记录</strong>新增真实阶段后，会在这里形成项目推进路径。</div>
-      <div class="section-note">当前阶段数据只属于本机当前项目，不会写入 Wekan。</div>
+      <div class="section-note">阶段数据属于当前 PMO 项目，不会写入 Wekan。</div>
     </section>
   </div>
 
@@ -230,7 +230,7 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
 
       <div class="asset-list" id="materialList"></div>
       <div class="empty" id="materialEmpty"><strong>还没有项目资料</strong>把真实项目资料索引沉淀到这里。</div>
-      <div class="section-note">当前只保存资料索引，不复制或上传实际文件。</div>
+      <div class="section-note">资料索引保存到 PMO 项目数据库；暂不复制或上传实际文件。</div>
     </section>
   </div>
 
@@ -450,15 +450,29 @@ async function loadTasks(){
 }
 
 
-function projectStoreKey(type){
-  return 'yu_pmo_' + type + '_' + (boardId || 'unknown');
+let stageItems=[];
+let riskItems=[];
+let materialItems=[];
+let decisionItems=[];
+
+async function pmoRequest(path, options={}){
+  const res=await fetch(path,{
+    ...options,
+    headers:{'Content-Type':'application/json',...(options.headers||{})}
+  });
+  if(!res.ok){
+    let detail='HTTP '+res.status;
+    try{
+      const data=await res.json();
+      detail=data.detail||detail;
+    }catch(e){}
+    throw new Error(detail);
+  }
+  if(res.status===204) return null;
+  const text=await res.text();
+  return text ? JSON.parse(text) : null;
 }
-function loadStored(type){
-  try{return JSON.parse(localStorage.getItem(projectStoreKey(type)) || '[]')}catch(e){return []}
-}
-function saveStored(type,data){
-  localStorage.setItem(projectStoreKey(type),JSON.stringify(data));
-}
+
 function currentStageFrom(stages){
   if(!Array.isArray(stages) || !stages.length) return null;
   return stages.find(s=>s.status==='active')
@@ -466,183 +480,274 @@ function currentStageFrom(stages){
     || [...stages].reverse().find(s=>s.status==='done')
     || stages[0];
 }
-function updateOverview(){
-  const stages=loadStored('stages');
-  const risks=loadStored('risks');
-  const current=currentStageFrom(stages);
-  const highRisks=risks.filter(r=>r.level==='high' && r.status!=='closed');
-  document.getElementById('overviewStage').textContent=current?.name || '--';
-  document.getElementById('overviewHighRisk').textContent=highRisks.length;
+
+async function loadProjectCoreData(){
+  const pid=await resolveProjectIdentity();
+  if(!pid) throw new Error('PROJECT_ID_UNAVAILABLE');
+  const [stages,risks]=await Promise.all([
+    pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/stages'),
+    pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/risks')
+  ]);
+  stageItems=Array.isArray(stages)?stages:[];
+  riskItems=Array.isArray(risks)?risks:[];
+  return {stages:stageItems,risks:riskItems};
+}
+
+async function updateOverview(){
   const list=document.getElementById('overviewRiskList');
   const empty=document.getElementById('overviewRiskEmpty');
-  list.innerHTML=highRisks.slice(0,5).map(r=>{
-    const statusText=r.status==='handling'?'处理中':'待处理';
-    return '<div class="item"><strong>'+esc(r.title)+'</strong><span>高风险 · '+statusText+' · 责任人：'+esc(r.owner||'未设置')+'</span></div>';
-  }).join('');
-  empty.style.display=highRisks.length?'none':'';
+  try{
+    const {stages,risks}=await loadProjectCoreData();
+    const current=currentStageFrom(stages);
+    const highRisks=risks.filter(r=>r.level==='high' && r.status!=='closed');
+    document.getElementById('overviewStage').textContent=current?.name || '--';
+    document.getElementById('overviewHighRisk').textContent=highRisks.length;
+    list.innerHTML=highRisks.slice(0,5).map(r=>{
+      const statusText=r.status==='handling'?'处理中':'待处理';
+      return '<div class="item"><strong>'+esc(r.title)+'</strong><span>高风险 · '+statusText+' · 责任人：'+esc(r.owner||'未设置')+'</span></div>';
+    }).join('');
+    empty.style.display=highRisks.length?'none':'';
+  }catch(e){
+    document.getElementById('overviewStage').textContent='--';
+    document.getElementById('overviewHighRisk').textContent='--';
+    list.innerHTML='';
+    empty.style.display='';
+    empty.textContent='PMO 数据库暂不可用';
+  }
 }
-function renderStages(){
-  const stages=loadStored('stages');
+
+async function renderStages(){
   const list=document.getElementById('stageList');
   const empty=document.getElementById('stageEmpty');
-  list.innerHTML=stages.map((s,i)=>{
-    const statusText=s.status==='done'?'已完成':s.status==='active'?'进行中':'未开始';
-    const cls=s.status==='done'?'done':s.status==='active'?'active':'';
-    return '<div class="stage-item"><div class="stage-main">' +
-      '<div class="stage-title">' + esc(s.name) + '</div>' +
-      '<div class="stage-meta"><span class="status-pill '+cls+'">'+statusText+'</span><span>计划完成：'+(s.date||'未设置')+'</span></div>' +
-      '</div><div class="stage-actions">' +
-      '<button class="mini-btn" onclick="cycleStage('+i+')">切换状态</button>' +
-      '<button class="mini-btn danger" onclick="deleteStage('+i+')">删除</button>' +
-      '</div></div>';
-  }).join('');
-  empty.style.display=stages.length?'none':'';
+  try{
+    const pid=await resolveProjectIdentity();
+    stageItems=await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/stages');
+    list.innerHTML=stageItems.map(s=>{
+      const statusText=s.status==='done'?'已完成':s.status==='active'?'进行中':'未开始';
+      const cls=s.status==='done'?'done':s.status==='active'?'active':'';
+      return '<div class="stage-item"><div class="stage-main">' +
+        '<div class="stage-title">'+esc(s.name)+'</div>' +
+        '<div class="stage-meta"><span class="status-pill '+cls+'">'+statusText+'</span><span>计划完成：'+(s.planned_due_date||'未设置')+'</span></div>' +
+        '</div><div class="stage-actions">' +
+        '<button class="mini-btn" onclick="cycleStage(\''+s.id+'\',\''+s.status+'\')">切换状态</button>' +
+        '<button class="mini-btn danger" onclick="deleteStage(\''+s.id+'\')">删除</button>' +
+        '</div></div>';
+    }).join('');
+    empty.style.display=stageItems.length?'none':'';
+  }catch(e){
+    list.innerHTML='';
+    empty.style.display='';
+    empty.innerHTML='<strong>阶段数据暂时无法读取</strong>请确认 PMO API 正常运行。';
+  }
 }
-function cycleStage(index){
-  const stages=loadStored('stages');
-  if(!stages[index]) return;
-  stages[index].status=stages[index].status==='pending'?'active':stages[index].status==='active'?'done':'pending';
-  saveStored('stages',stages); renderStages();
+
+async function cycleStage(id,status){
+  const next=status==='pending'?'active':status==='active'?'done':'pending';
+  await pmoRequest('/api/stages/'+encodeURIComponent(id),{
+    method:'PATCH',
+    body:JSON.stringify({status:next})
+  });
+  await renderStages();
 }
-function deleteStage(index){
-  const stages=loadStored('stages'); stages.splice(index,1); saveStored('stages',stages); renderStages();
+async function deleteStage(id){
+  await pmoRequest('/api/stages/'+encodeURIComponent(id),{method:'DELETE'});
+  await renderStages();
 }
-document.getElementById('addStageBtn').addEventListener('click',()=>{
+document.getElementById('addStageBtn').addEventListener('click',async()=>{
   const name=document.getElementById('stageName').value.trim();
   if(!name){alert('请先填写阶段名称');return;}
-  const stages=loadStored('stages');
-  stages.push({name,date:document.getElementById('stageDate').value,status:document.getElementById('stageStatus').value,createdAt:new Date().toISOString()});
-  saveStored('stages',stages);
-  document.getElementById('stageName').value='';
-  document.getElementById('stageDate').value='';
-  renderStages();
+  try{
+    const pid=await resolveProjectIdentity();
+    await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/stages',{
+      method:'POST',
+      body:JSON.stringify({
+        name,
+        planned_due_date:document.getElementById('stageDate').value||null,
+        status:document.getElementById('stageStatus').value,
+        sort_order:stageItems.length
+      })
+    });
+    document.getElementById('stageName').value='';
+    document.getElementById('stageDate').value='';
+    await renderStages();
+  }catch(e){alert('保存失败：'+e.message);}
 });
 
-function renderRisks(){
-  const risks=loadStored('risks');
+async function renderRisks(){
   const list=document.getElementById('riskList');
   const empty=document.getElementById('riskEmpty');
-  list.innerHTML=risks.map((r,i)=>{
-    const levelText=r.level==='high'?'高风险':r.level==='mid'?'中风险':'低风险';
-    const levelCls=r.level==='high'?'risk-high':r.level==='mid'?'risk-mid':'risk-low';
-    const statusText=r.status==='closed'?'已关闭':r.status==='handling'?'处理中':'待处理';
-    return '<div class="risk-item"><div class="risk-main">' +
-      '<div class="risk-title">'+esc(r.title)+'</div>' +
-      '<div class="risk-meta"><span class="risk-level '+levelCls+'">'+levelText+'</span><span>责任人：'+esc(r.owner||'未设置')+'</span><span>'+statusText+'</span></div>' +
-      '</div><div class="risk-actions">' +
-      '<button class="mini-btn" onclick="cycleRisk('+i+')">切换状态</button>' +
-      '<button class="mini-btn danger" onclick="deleteRisk('+i+')">删除</button>' +
-      '</div></div>';
-  }).join('');
-  empty.style.display=risks.length?'none':'';
+  try{
+    const pid=await resolveProjectIdentity();
+    riskItems=await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/risks');
+    list.innerHTML=riskItems.map(r=>{
+      const levelText=r.level==='high'?'高风险':r.level==='mid'?'中风险':'低风险';
+      const levelCls=r.level==='high'?'risk-high':r.level==='mid'?'risk-mid':'risk-low';
+      const statusText=r.status==='closed'?'已关闭':r.status==='handling'?'处理中':'待处理';
+      return '<div class="risk-item"><div class="risk-main">' +
+        '<div class="risk-title">'+esc(r.title)+'</div>' +
+        '<div class="risk-meta"><span class="risk-level '+levelCls+'">'+levelText+'</span><span>责任人：'+esc(r.owner||'未设置')+'</span><span>'+statusText+'</span></div>' +
+        '</div><div class="risk-actions">' +
+        '<button class="mini-btn" onclick="cycleRisk(\''+r.id+'\',\''+r.status+'\')">切换状态</button>' +
+        '<button class="mini-btn danger" onclick="deleteRisk(\''+r.id+'\')">删除</button>' +
+        '</div></div>';
+    }).join('');
+    empty.style.display=riskItems.length?'none':'';
+  }catch(e){
+    list.innerHTML='';
+    empty.style.display='';
+    empty.innerHTML='<strong>风险数据暂时无法读取</strong>请确认 PMO API 正常运行。';
+  }
 }
-function cycleRisk(index){
-  const risks=loadStored('risks');
-  if(!risks[index]) return;
-  risks[index].status=risks[index].status==='open'?'handling':risks[index].status==='handling'?'closed':'open';
-  saveStored('risks',risks); renderRisks();
+
+async function cycleRisk(id,status){
+  const next=status==='open'?'handling':status==='handling'?'closed':'open';
+  await pmoRequest('/api/risks/'+encodeURIComponent(id),{
+    method:'PATCH',
+    body:JSON.stringify({status:next})
+  });
+  await renderRisks();
 }
-function deleteRisk(index){
-  const risks=loadStored('risks'); risks.splice(index,1); saveStored('risks',risks); renderRisks();
+async function deleteRisk(id){
+  await pmoRequest('/api/risks/'+encodeURIComponent(id),{method:'DELETE'});
+  await renderRisks();
 }
-document.getElementById('addRiskBtn').addEventListener('click',()=>{
-  const title=document.getElementById('riskTitle').value.trim();
-  if(!title){alert('请先填写风险或问题标题');return;}
-  const risks=loadStored('risks');
-  risks.push({title,level:document.getElementById('riskLevel').value,owner:document.getElementById('riskOwner').value.trim(),status:document.getElementById('riskStatus').value,createdAt:new Date().toISOString()});
-  saveStored('risks',risks);
-  document.getElementById('riskTitle').value='';
-  document.getElementById('riskOwner').value='';
-  renderRisks();
+document.getElementById('addRiskBtn').addEventListener('click',async()=>{
+  const riskTitle=document.getElementById('riskTitle').value.trim();
+  if(!riskTitle){alert('请先填写风险或问题标题');return;}
+  try{
+    const pid=await resolveProjectIdentity();
+    await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/risks',{
+      method:'POST',
+      body:JSON.stringify({
+        title:riskTitle,
+        level:document.getElementById('riskLevel').value,
+        owner:document.getElementById('riskOwner').value.trim()||null,
+        status:document.getElementById('riskStatus').value,
+        source:'manual'
+      })
+    });
+    document.getElementById('riskTitle').value='';
+    document.getElementById('riskOwner').value='';
+    await renderRisks();
+  }catch(e){alert('保存失败：'+e.message);}
 });
 
-
-function renderMaterials(){
-  const items=loadStored('materials');
+async function renderMaterials(){
   const list=document.getElementById('materialList');
   const empty=document.getElementById('materialEmpty');
-  list.innerHTML=items.map((m,i)=>{
-    return '<div class="asset-item"><div>' +
-      '<div class="asset-title">'+esc(m.name)+'</div>' +
-      '<div class="asset-meta"><span>'+esc(m.type||'其他')+'</span><span>'+fmtDate(m.createdAt)+'</span></div>' +
-      (m.link?'<div class="asset-desc">位置：'+esc(m.link)+'</div>':'') +
-      (m.note?'<div class="asset-desc">'+esc(m.note)+'</div>':'') +
-      '</div><button class="mini-btn danger" onclick="deleteMaterial('+i+')">删除</button></div>';
-  }).join('');
-  empty.style.display=items.length?'none':'';
+  try{
+    const pid=await resolveProjectIdentity();
+    materialItems=await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/materials');
+    list.innerHTML=materialItems.map(m=>{
+      return '<div class="asset-item"><div>' +
+        '<div class="asset-title">'+esc(m.name)+'</div>' +
+        '<div class="asset-meta"><span>'+esc(m.category||'其他')+'</span><span>'+fmtDate(m.created_at)+'</span></div>' +
+        (m.link?'<div class="asset-desc">位置：'+esc(m.link)+'</div>':'') +
+        (m.note?'<div class="asset-desc">'+esc(m.note)+'</div>':'') +
+        '</div><button class="mini-btn danger" onclick="deleteMaterial(\''+m.id+'\')">删除</button></div>';
+    }).join('');
+    empty.style.display=materialItems.length?'none':'';
+  }catch(e){
+    list.innerHTML='';
+    empty.style.display='';
+    empty.innerHTML='<strong>资料数据暂时无法读取</strong>请确认 PMO API 正常运行。';
+  }
 }
-function deleteMaterial(index){
-  const items=loadStored('materials'); items.splice(index,1); saveStored('materials',items); renderMaterials();
+async function deleteMaterial(id){
+  await pmoRequest('/api/materials/'+encodeURIComponent(id),{method:'DELETE'});
+  await renderMaterials();
 }
-document.getElementById('addMaterialBtn').addEventListener('click',()=>{
+document.getElementById('addMaterialBtn').addEventListener('click',async()=>{
   const name=document.getElementById('materialName').value.trim();
   if(!name){alert('请先填写资料名称');return;}
-  const items=loadStored('materials');
-  items.unshift({
-    name,
-    type:document.getElementById('materialType').value,
-    link:document.getElementById('materialLink').value.trim(),
-    note:document.getElementById('materialNote').value.trim(),
-    createdAt:new Date().toISOString()
-  });
-  saveStored('materials',items);
-  document.getElementById('materialName').value='';
-  document.getElementById('materialLink').value='';
-  document.getElementById('materialNote').value='';
-  renderMaterials();
+  try{
+    const pid=await resolveProjectIdentity();
+    await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/materials',{
+      method:'POST',
+      body:JSON.stringify({
+        name,
+        category:document.getElementById('materialType').value,
+        link:document.getElementById('materialLink').value.trim()||null,
+        note:document.getElementById('materialNote').value.trim()||null
+      })
+    });
+    document.getElementById('materialName').value='';
+    document.getElementById('materialLink').value='';
+    document.getElementById('materialNote').value='';
+    await renderMaterials();
+  }catch(e){alert('保存失败：'+e.message);}
 });
 
-function renderMeetings(){
-  const items=loadStored('meetings');
+async function renderMeetings(){
   const list=document.getElementById('meetingList');
   const empty=document.getElementById('meetingEmpty');
-  list.innerHTML=items.map((m,i)=>{
-    const statusText=m.status==='done'?'已完成':'待完成';
-    const cls=m.status==='done'?'done':'';
-    return '<div class="meeting-item"><div>' +
-      '<div class="meeting-title">'+esc(m.name||'未命名会议')+'</div>' +
-      '<div class="meeting-meta"><span>'+(m.date||'未设置日期')+'</span><span>责任人：'+esc(m.owner||'未设置')+'</span><span>截止：'+(m.deadline||'未设置')+'</span><span class="status-pill '+cls+'">'+statusText+'</span></div>' +
-      '<div class="meeting-desc">'+esc(m.decision)+'</div>' +
-      '</div><div class="stage-actions"><button class="mini-btn" onclick="toggleMeeting('+i+')">切换状态</button><button class="mini-btn danger" onclick="deleteMeeting('+i+')">删除</button></div></div>';
-  }).join('');
-  empty.style.display=items.length?'none':'';
+  try{
+    const pid=await resolveProjectIdentity();
+    decisionItems=await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/decisions');
+    list.innerHTML=decisionItems.map(m=>{
+      const statusText=m.status==='done'?'已完成':'待完成';
+      const cls=m.status==='done'?'done':'';
+      return '<div class="meeting-item"><div>' +
+        '<div class="meeting-title">'+esc(m.meeting_name||'未命名会议')+'</div>' +
+        '<div class="meeting-meta"><span>'+(m.meeting_date||'未设置日期')+'</span><span>责任人：'+esc(m.owner||'未设置')+'</span><span>截止：'+(m.due_date||'未设置')+'</span><span class="status-pill '+cls+'">'+statusText+'</span></div>' +
+        '<div class="meeting-desc">'+esc(m.decision)+'</div>' +
+        '</div><div class="stage-actions"><button class="mini-btn" onclick="toggleMeeting(\''+m.id+'\',\''+m.status+'\')">切换状态</button><button class="mini-btn danger" onclick="deleteMeeting(\''+m.id+'\')">删除</button></div></div>';
+    }).join('');
+    empty.style.display=decisionItems.length?'none':'';
+  }catch(e){
+    list.innerHTML='';
+    empty.style.display='';
+    empty.innerHTML='<strong>会议决策暂时无法读取</strong>请确认 PMO API 正常运行。';
+  }
 }
-function toggleMeeting(index){
-  const items=loadStored('meetings'); if(!items[index])return;
-  items[index].status=items[index].status==='done'?'open':'done';
-  saveStored('meetings',items); renderMeetings();
+async function toggleMeeting(id,status){
+  await pmoRequest('/api/decisions/'+encodeURIComponent(id),{
+    method:'PATCH',
+    body:JSON.stringify({status:status==='done'?'open':'done'})
+  });
+  await renderMeetings();
 }
-function deleteMeeting(index){
-  const items=loadStored('meetings'); items.splice(index,1); saveStored('meetings',items); renderMeetings();
+async function deleteMeeting(id){
+  await pmoRequest('/api/decisions/'+encodeURIComponent(id),{method:'DELETE'});
+  await renderMeetings();
 }
-document.getElementById('addMeetingBtn').addEventListener('click',()=>{
+document.getElementById('addMeetingBtn').addEventListener('click',async()=>{
   const decision=document.getElementById('meetingDecision').value.trim();
   if(!decision){alert('请先填写决策或行动事项');return;}
-  const items=loadStored('meetings');
-  items.unshift({
-    name:document.getElementById('meetingName').value.trim(),
-    date:document.getElementById('meetingDate').value,
-    owner:document.getElementById('meetingOwner').value.trim(),
-    deadline:document.getElementById('meetingDeadline').value,
-    decision,
-    status:'open',
-    createdAt:new Date().toISOString()
-  });
-  saveStored('meetings',items);
-  document.getElementById('meetingName').value='';
-  document.getElementById('meetingOwner').value='';
-  document.getElementById('meetingDeadline').value='';
-  document.getElementById('meetingDecision').value='';
-  renderMeetings();
+  try{
+    const pid=await resolveProjectIdentity();
+    await pmoRequest('/api/projects/'+encodeURIComponent(pid)+'/decisions',{
+      method:'POST',
+      body:JSON.stringify({
+        meeting_name:document.getElementById('meetingName').value.trim()||null,
+        meeting_date:document.getElementById('meetingDate').value||null,
+        owner:document.getElementById('meetingOwner').value.trim()||null,
+        due_date:document.getElementById('meetingDeadline').value||null,
+        decision,
+        status:'open'
+      })
+    });
+    document.getElementById('meetingName').value='';
+    document.getElementById('meetingOwner').value='';
+    document.getElementById('meetingDeadline').value='';
+    document.getElementById('meetingDecision').value='';
+    await renderMeetings();
+  }catch(e){alert('保存失败：'+e.message);}
 }
 
 document.getElementById('refreshTasks').addEventListener('click',loadTasks);
-if(tab === 'tasks') loadTasks();
-if(tab === 'stages') renderStages();
-if(tab === 'risks') renderRisks();
-if(tab === 'materials') renderMaterials();
-if(tab === 'meetings') renderMeetings();
-if(tab === 'overview') updateOverview();
-migrateLegacyProjectData();
+
+async function initializeProjectPage(){
+  await resolveProjectIdentity();
+  await migrateLegacyProjectData();
+
+  if(tab === 'tasks') await loadTasks();
+  if(tab === 'stages') await renderStages();
+  if(tab === 'risks') await renderRisks();
+  if(tab === 'materials') await renderMaterials();
+  if(tab === 'meetings') await renderMeetings();
+  if(tab === 'overview') await updateOverview();
+}
+initializeProjectPage();
 </script>
 </body></html>
