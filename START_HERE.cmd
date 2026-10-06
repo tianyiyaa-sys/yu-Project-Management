@@ -1,10 +1,12 @@
 @echo off
 setlocal
-title Yu Project Management - Local Start
+chcp 65001 >nul
+title Yu Project Management - China Network Start
 cd /d "%~dp0"
 
 echo ========================================
 echo   Yu Project Management - Local Start
+echo   China network optimized
 echo ========================================
 echo.
 echo This window will stay open so errors can be seen.
@@ -35,7 +37,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [3/4] Building and starting...
+echo [3/4] Building and starting with China mirror...
 docker compose -f docker-compose.yml -f docker-compose.yu-local.yml up -d --build
 if errorlevel 1 (
   echo.
