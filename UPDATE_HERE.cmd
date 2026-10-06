@@ -70,7 +70,7 @@ if errorlevel 1 (
 
 timeout /t 3 /nobreak >nul
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 'http://localhost:3100/health'; if($r.StatusCode -ne 200){exit 1} } catch { exit 1 }"
+  "try { $r=Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 'http://localhost:3100/api/health'; if($r.StatusCode -ne 200){exit 1} } catch { exit 1 }"
 if errorlevel 1 (
   echo WARNING: PMO API health check failed. UI is still available.
 ) else (
