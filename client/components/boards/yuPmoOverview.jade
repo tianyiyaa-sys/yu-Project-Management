@@ -1,0 +1,41 @@
+template(name="yuPmoOverview")
+  .yu-pmo-overview
+    .yu-pmo-overview__header
+      .yu-pmo-overview__title
+        span.yu-pmo-overview__eyebrow 雨诺项目经营工作台
+        h2 PMO 项目总览
+        p 先看异常，再进入项目处理。Wekan 负责项目执行，RBC 负责合同、回款和工时。
+      .yu-pmo-overview__status
+        span.yu-pmo-status-dot
+        | Wekan 已连接
+    .yu-pmo-kpis
+      .yu-pmo-kpi
+        span.yu-pmo-kpi__label 当前项目
+        strong.yu-pmo-kpi__value {{yuProjectCount}}
+        span.yu-pmo-kpi__hint 来自 Wekan
+      .yu-pmo-kpi
+        span.yu-pmo-kpi__label 高风险项目
+        strong.yu-pmo-kpi__value --
+        span.yu-pmo-kpi__hint 风险中心接入后计算
+      .yu-pmo-kpi
+        span.yu-pmo-kpi__label 合同 / 回款
+        strong.yu-pmo-kpi__value --
+        span.yu-pmo-kpi__hint RBC 待接入
+      .yu-pmo-kpi
+        span.yu-pmo-kpi__label 已投入人天
+        strong.yu-pmo-kpi__value --
+        span.yu-pmo-kpi__hint RBC 待接入
+    .yu-pmo-focus
+      .yu-pmo-focus__head
+        strong 今日关注
+        span 第一版先建立统一项目视图，后续自动显示延期、超投入和高风险项目。
+      .yu-pmo-focus__items
+        .yu-pmo-focus__item
+          i.fa.fa-tasks
+          span 项目执行数据已使用 Wekan 作为唯一来源
+        .yu-pmo-focus__item
+          i.fa.fa-database
+          span RBC 接入后自动补充合同、回款和工时
+        .yu-pmo-focus__item
+          i.fa.fa-magic
+          span 小雨将基于真实项目数据生成诊断和下一步建议
