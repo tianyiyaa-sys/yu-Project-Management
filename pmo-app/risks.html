@@ -116,7 +116,14 @@ async function loadBoards(){
 
 function collectRisks(boards){
   boardMap={};
-  boards.forEach(b=>boardMap[b._id||b.id||'']=b.title||b.name||'未命名项目');
+  boards.forEach(b=>{
+    const id=b._id||b.id||'';
+    const title=b.title||b.name||'未命名项目';
+    if(id){
+      boardMap[id]=title;
+      localStorage.setItem('yu_pmo_project_title_' + id, title);
+    }
+  });
 
   const ids=new Set(Object.keys(boardMap));
   for(let i=0;i<localStorage.length;i++){
@@ -128,8 +135,10 @@ function collectRisks(boards){
   ids.forEach(boardId=>{
     let risks=[];
     try{risks=JSON.parse(localStorage.getItem('yu_pmo_risks_'+boardId)||'[]')}catch(e){}
+    const cachedTitle=localStorage.getItem('yu_pmo_project_title_' + boardId);
+    const projectTitle=boardMap[boardId] || cachedTitle || '未知项目';
     (Array.isArray(risks)?risks:[]).forEach((r,index)=>{
-      allRisks.push({...r,boardId,index,projectTitle:boardMap[boardId]||'未知项目'});
+      allRisks.push({...r,boardId,index,projectTitle});
     });
   });
 }
