@@ -152,6 +152,26 @@ async function ensurePmoProject(boardId, name){
     return null;
   }
 }
+async function repairLegacyForProject(boardId, projectId){
+  if(!boardId || !projectId) return;
+  const read=(type)=>{
+    try{return JSON.parse(localStorage.getItem('yu_pmo_'+type+'_'+boardId)||'[]')}catch(e){return []}
+  };
+  const payload={
+    stages:read('stages'),
+    risks:read('risks'),
+    materials:read('materials'),
+    decisions:read('meetings')
+  };
+  if(!(payload.stages.length||payload.risks.length||payload.materials.length||payload.decisions.length)) return;
+  try{
+    await fetch('/api/projects/'+encodeURIComponent(projectId)+'/migrate-local',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+  }catch(e){}
+}
 async function renderBoards(boards){
   const active = boards.filter(b => !b.archived && (b.type === undefined || b.type === 'board'));
 
@@ -159,7 +179,8 @@ async function renderBoards(boards){
     const rawId=b._id||b.id||'';
     const rawTitle=b.title||b.name||'未命名项目';
     localStorage.setItem('yu_pmo_project_title_' + rawId, rawTitle);
-    await ensurePmoProject(rawId,rawTitle);
+    const project=await ensurePmoProject(rawId,rawTitle);
+    if(project?.id) await repairLegacyForProject(rawId,project.id);
   }));
 
   let summaries=[];
