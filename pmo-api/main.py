@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text, create_engine, select
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text, create_engine, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 DATABASE_URL = os.getenv(
@@ -90,6 +90,12 @@ class Decision(Base):
 
 
 Base.metadata.create_all(engine)
+
+# create_all does not alter existing tables. Keep local prototype schema forward-compatible.
+with engine.begin() as connection:
+    connection.execute(text(
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS legacy_migrated_at TIMESTAMP NULL"
+    ))
 
 app = FastAPI(title="Yu PMO API", version="0.2.0")
 
