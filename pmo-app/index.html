@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>雨诺项目经营工作台</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,"Microsoft YaHei",Arial,sans-serif;background:#f5f7fb;color:#0f172a}
+    .app{display:grid;grid-template-columns:236px 1fr;min-height:100vh}.side{background:#0f172a;color:#fff;padding:24px 16px;position:sticky;top:0;height:100vh}
+    .brand{font-size:18px;font-weight:800;padding:0 10px 22px}.brand small{display:block;color:#94a3b8;font-size:11px;font-weight:500;margin-top:5px}
+    .nav a{display:flex;align-items:center;gap:10px;color:#cbd5e1;text-decoration:none;padding:11px 12px;border-radius:10px;margin:4px 0;font-size:14px}
+    .nav a.active,.nav a:hover{background:#1e293b;color:#fff}.dot{width:7px;height:7px;border-radius:50%;background:#38bdf8}
+    .main{padding:30px 34px 48px}.top{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:24px}
+    h1{font-size:26px;margin:0 0 7px}.sub{color:#64748b;font-size:13px}.actions{display:flex;gap:10px}
+    .btn{border:1px solid #dbe3ee;background:#fff;color:#0f172a;border-radius:10px;padding:9px 13px;text-decoration:none;font-size:13px;font-weight:600}
+    .btn.primary{background:#2563eb;color:#fff;border-color:#2563eb}
+    .status{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap}.pill{padding:7px 10px;border:1px solid #dce6f1;background:#fff;border-radius:999px;font-size:12px;color:#475569}
+    .pill.ok{background:#ecfdf5;color:#166534;border-color:#bbf7d0}
+    .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}
+    .card{background:#fff;border:1px solid #e5ebf2;border-radius:16px;padding:18px;box-shadow:0 6px 18px rgba(15,23,42,.04)}
+    .label{font-size:12px;color:#64748b}.num{font-size:30px;font-weight:800;margin:10px 0 6px}.hint{font-size:11px;color:#94a3b8}
+    .grid{display:grid;grid-template-columns:1.5fr .8fr;gap:16px}.section-title{font-size:15px;font-weight:800;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:11px 8px;border-bottom:1px solid #eef2f7}th{color:#64748b;font-weight:600}
+    .empty{padding:30px 12px;text-align:center;color:#94a3b8;font-size:13px}.list{display:grid;gap:10px}.item{padding:12px;border-radius:12px;background:#f8fafc;border:1px solid #eef2f7;font-size:12px;color:#475569}
+    .item strong{display:block;color:#0f172a;margin-bottom:4px}.footer-note{margin-top:18px;color:#94a3b8;font-size:11px}
+    @media(max-width:1000px){.app{grid-template-columns:1fr}.side{height:auto;position:static}.nav{display:flex;flex-wrap:wrap}.main{padding:22px}.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+    @media(max-width:600px){.kpis{grid-template-columns:1fr}.top{display:block}.actions{margin-top:14px;flex-wrap:wrap}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">雨诺项目经营工作台<small>项目全生命周期管理与 PMO 智能驾驶舱</small></div>
+    <nav class="nav">
+      <a class="active" href="#"><span class="dot"></span>PMO 首页</a>
+      <a href="#"><span class="dot"></span>项目中心</a>
+      <a href="#"><span class="dot"></span>风险中心</a>
+      <a href="#"><span class="dot"></span>资产中心</a>
+      <a href="#"><span class="dot"></span>分析中心</a>
+      <a href="#"><span class="dot"></span>小雨助手</a>
+    </nav>
+  </aside>
+  <main class="main">
+    <div class="top">
+      <div>
+        <h1>PMO 项目总览</h1>
+        <div class="sub">先看异常，再进入项目处理。Wekan 管执行，RBC 管钱和人，小雨负责判断与生成。</div>
+      </div>
+      <div class="actions">
+        <a class="btn" href="http://localhost:3000" target="_blank">打开 Wekan</a>
+        <a class="btn primary" href="#">新建项目</a>
+      </div>
+    </div>
+
+    <div class="status">
+      <span class="pill ok">● 本地 PMO 已运行</span>
+      <span class="pill">Wekan：localhost:3000</span>
+      <span class="pill">RBC：待接入</span>
+      <span class="pill">小雨 AI：待接入</span>
+    </div>
+
+    <section class="kpis">
+      <div class="card"><div class="label">当前项目</div><div class="num">0</div><div class="hint">Wekan 项目同步下一步接入</div></div>
+      <div class="card"><div class="label">高风险项目</div><div class="num">--</div><div class="hint">风险规则待接入</div></div>
+      <div class="card"><div class="label">合同 / 回款</div><div class="num">--</div><div class="hint">来自 RBC</div></div>
+      <div class="card"><div class="label">已投入人天</div><div class="num">--</div><div class="hint">来自 RBC</div></div>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <div class="section-title">项目经营视图</div>
+        <table>
+          <thead><tr><th>项目</th><th>阶段</th><th>进度</th><th>投入</th><th>回款</th><th>风险</th><th>健康度</th></tr></thead>
+        </table>
+        <div class="empty">当前还没有同步项目。下一步我会把 Wekan 看板自动映射成项目。</div>
+      </section>
+      <section class="card">
+        <div class="section-title">需要我关注</div>
+        <div class="list">
+          <div class="item"><strong>Wekan 执行层</strong>已独立运行，后续只负责任务、看板、负责人、截止时间。</div>
+          <div class="item"><strong>RBC 经营数据</strong>合同、回款、工时不会重复录入，后续通过接口读取。</div>
+          <div class="item"><strong>小雨项目助手</strong>后续负责风险判断、项目总结、周报和管理层汇报。</div>
+        </div>
+      </section>
+    </div>
+
+    <div class="footer-note">V0.1 · 本页面不使用虚构经营数据；未接入的数据统一显示“待接入”。</div>
+  </main>
+</div>
+</body>
+</html>
