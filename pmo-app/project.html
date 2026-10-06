@@ -800,7 +800,7 @@ document.getElementById('addMeetingBtn').addEventListener('click',async()=>{
     document.getElementById('meetingDecision').value='';
     await renderMeetings();
   }catch(e){alert('保存失败：'+e.message);}
-}
+});
 
 document.getElementById('refreshTasks').addEventListener('click',loadTasks);
 
