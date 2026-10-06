@@ -374,6 +374,34 @@ async function resolveProjectIdentity(){
       }
     }
 
+    if(!data && !boardId){
+      const token=sessionStorage.getItem('yu_wekan_token');
+      const userId=sessionStorage.getItem('yu_wekan_user_id');
+      if(token && userId){
+        const boardRes=await fetch('/wekan/api/users/'+encodeURIComponent(userId)+'/boards',{
+          headers:{Authorization:'Bearer '+token}
+        });
+        if(boardRes.ok){
+          const boardData=await boardRes.json();
+          const boards=normaliseArray(boardData).filter(b=>!b.archived&&(b.type===undefined||b.type==='board'));
+          if(boards.length===1){
+            const b=boards[0];
+            boardId=b._id||b.id||'';
+            title=b.title||b.name||'未命名项目';
+            const syncRes=await fetch('/api/projects/sync-wekan',{
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({board_id:boardId,name:title})
+            });
+            if(syncRes.ok) data=await syncRes.json();
+          }else if(boards.length>1){
+            location.replace('projects.html');
+            return '';
+          }
+        }
+      }
+    }
+
     if(!data) return '';
 
     projectId=data.id || projectId;
