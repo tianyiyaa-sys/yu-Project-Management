@@ -154,7 +154,67 @@ function render(){
   document.getElementById(id).addEventListener(id==='searchInput'?'input':'change',render);
 });
 
+async function repairLegacyRiskData(){
+  let projects=[];
+  try{
+    const res=await fetch('/api/projects');
+    if(res.ok) projects=await res.json();
+  }catch(e){}
+
+  if(!Array.isArray(projects)) projects=[];
+
+  if(!projects.length){
+    const token=sessionStorage.getItem('yu_wekan_token');
+    const userId=sessionStorage.getItem('yu_wekan_user_id');
+    if(token&&userId){
+      try{
+        const res=await fetch('/wekan/api/users/'+encodeURIComponent(userId)+'/boards',{
+          headers:{Authorization:'Bearer '+token}
+        });
+        if(res.ok){
+          const data=await res.json();
+          const boards=Array.isArray(data)?data:(Array.isArray(data?.boards)?data.boards:(Array.isArray(data?.data)?data.data:[]));
+          for(const b of boards.filter(x=>!x.archived&&(x.type===undefined||x.type==='board'))){
+            const boardId=b._id||b.id||'';
+            const name=b.title||b.name||'未命名项目';
+            if(!boardId) continue;
+            const sync=await fetch('/api/projects/sync-wekan',{
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({board_id:boardId,name})
+            });
+            if(sync.ok) projects.push(await sync.json());
+          }
+        }
+      }catch(e){}
+    }
+  }
+
+  for(const project of projects){
+    const boardId=project.wekan_board_id;
+    if(!boardId||!project.id) continue;
+    const read=(type)=>{
+      try{return JSON.parse(localStorage.getItem('yu_pmo_'+type+'_'+boardId)||'[]')}catch(e){return []}
+    };
+    const payload={
+      stages:read('stages'),
+      risks:read('risks'),
+      materials:read('materials'),
+      decisions:read('meetings')
+    };
+    if(!(payload.stages.length||payload.risks.length||payload.materials.length||payload.decisions.length)) continue;
+    try{
+      await fetch('/api/projects/'+encodeURIComponent(project.id)+'/migrate-local',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      });
+    }catch(e){}
+  }
+}
+
 (async function init(){
+  await repairLegacyRiskData();
   try{
     const res=await fetch('/api/risks');
     if(!res.ok) throw new Error('HTTP '+res.status);
