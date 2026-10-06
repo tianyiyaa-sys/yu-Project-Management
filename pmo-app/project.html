@@ -67,10 +67,10 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
 
   <div id="overviewView">
   <section class="summary-grid">
-    <div class="summary"><span>当前阶段</span><strong>--</strong></div>
+    <div class="summary"><span>当前阶段</span><strong id="overviewStage">--</strong></div>
     <div class="summary"><span>项目进度</span><strong>--</strong></div>
     <div class="summary"><span>项目健康度</span><strong>--</strong></div>
-    <div class="summary"><span>高风险事项</span><strong>--</strong></div>
+    <div class="summary"><span>高风险事项</span><strong id="overviewHighRisk">0</strong></div>
   </section>
 
   <div class="detail-grid">
@@ -98,7 +98,8 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
       <section class="panel">
         <div class="panel-title">当前风险</div>
         <div class="panel-sub">高风险、阻塞、超期事项集中展示。</div>
-        <div class="empty">暂无风险数据</div>
+        <div id="overviewRiskList"></div>
+        <div class="empty" id="overviewRiskEmpty">暂无风险数据</div>
       </section>
 
       <section class="panel">
@@ -346,6 +347,28 @@ function loadStored(type){
 function saveStored(type,data){
   localStorage.setItem(projectStoreKey(type),JSON.stringify(data));
 }
+function currentStageFrom(stages){
+  if(!Array.isArray(stages) || !stages.length) return null;
+  return stages.find(s=>s.status==='active')
+    || stages.find(s=>s.status==='pending')
+    || [...stages].reverse().find(s=>s.status==='done')
+    || stages[0];
+}
+function updateOverview(){
+  const stages=loadStored('stages');
+  const risks=loadStored('risks');
+  const current=currentStageFrom(stages);
+  const highRisks=risks.filter(r=>r.level==='high' && r.status!=='closed');
+  document.getElementById('overviewStage').textContent=current?.name || '--';
+  document.getElementById('overviewHighRisk').textContent=highRisks.length;
+  const list=document.getElementById('overviewRiskList');
+  const empty=document.getElementById('overviewRiskEmpty');
+  list.innerHTML=highRisks.slice(0,5).map(r=>{
+    const statusText=r.status==='handling'?'处理中':'待处理';
+    return '<div class="item"><strong>'+esc(r.title)+'</strong><span>高风险 · '+statusText+' · 责任人：'+esc(r.owner||'未设置')+'</span></div>';
+  }).join('');
+  empty.style.display=highRisks.length?'none':'';
+}
 function renderStages(){
   const stages=loadStored('stages');
   const list=document.getElementById('stageList');
@@ -425,5 +448,6 @@ document.getElementById('refreshTasks').addEventListener('click',loadTasks);
 if(tab === 'tasks') loadTasks();
 if(tab === 'stages') renderStages();
 if(tab === 'risks') renderRisks();
+if(tab === 'overview') updateOverview();
 </script>
 </body></html>
