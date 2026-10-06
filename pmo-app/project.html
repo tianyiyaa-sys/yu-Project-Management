@@ -34,7 +34,7 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
 <main>
   <a class="back" href="projects.html">← 返回项目中心</a>
   <div class="topbar">
-    <div><div class="eyebrow">Project Workspace</div><h1>单项目工作台</h1><div class="subtitle">项目名称将在选中真实项目后显示；当前展示页面结构。</div></div>
+    <div><div class="eyebrow">Project Workspace</div><h1 id="projectTitle">单项目工作台</h1><div class="subtitle" id="projectSubtitle">从项目中心选择项目后，这里展示该项目的完整管理视图。</div></div>
     <div class="actions"><a class="btn" href="http://localhost:3000" target="_blank">打开 Wekan 执行看板</a></div>
   </div>
 
@@ -102,4 +102,15 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
       </section>
     </div>
   </div>
-</main></div></body></html>
+</main></div>
+<script>
+const params = new URLSearchParams(location.search);
+const title = params.get('title');
+const boardId = params.get('boardId');
+if(title){
+  document.getElementById('projectTitle').textContent = title;
+  document.title = title + ' - 雨诺项目工作台';
+  document.getElementById('projectSubtitle').textContent = 'Wekan 项目已关联' + (boardId ? ' · Board ID ' + boardId : '') + '；经营与风险数据按接入进度逐步补齐。';
+}
+</script>
+</body></html>
