@@ -72,7 +72,7 @@ table{width:100%;border-collapse:collapse;min-width:880px}th{text-align:left;pad
 
   <section class="panel">
     <div class="panel-title">风险清单</div>
-    <div class="panel-sub">风险来源于各项目“风险问题”页；当前数据保存在本机。</div>
+    <div class="panel-sub">风险来源于各项目“风险问题”页；数据统一保存在 PMO 项目数据库。</div>
 
     <div class="toolbar">
       <input class="search" id="searchInput" placeholder="搜索风险标题 / 项目 / 责任人">
@@ -94,59 +94,18 @@ table{width:100%;border-collapse:collapse;min-width:880px}th{text-align:left;pad
 </div>
 
 <script>
-const TOKEN_KEY='yu_wekan_token', USER_KEY='yu_wekan_user_id';
-let boardMap={}, allRisks=[];
+let allRisks=[];
 
 function esc(v){return String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s]))}
 function fmtDate(v){if(!v)return '--';const d=new Date(v);if(Number.isNaN(d.getTime()))return '--';return d.toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}
-function normBoards(data){if(Array.isArray(data))return data;if(Array.isArray(data?.boards))return data.boards;if(Array.isArray(data?.data))return data.data;return []}
 function riskLevelText(v){return v==='high'?'高风险':v==='mid'?'中风险':'低风险'}
 function riskLevelClass(v){return v==='high'?'high':v==='mid'?'mid':'low'}
 function riskStatusText(v){return v==='closed'?'已关闭':v==='handling'?'处理中':'待处理'}
 
-async function loadBoards(){
-  const token=sessionStorage.getItem(TOKEN_KEY), userId=sessionStorage.getItem(USER_KEY);
-  if(!token||!userId) return [];
-  try{
-    const res=await fetch('/wekan/api/users/'+encodeURIComponent(userId)+'/boards',{headers:{Authorization:'Bearer '+token}});
-    if(!res.ok) return [];
-    return normBoards(await res.json()).filter(b=>!b.archived&&(b.type===undefined||b.type==='board'));
-  }catch(e){return []}
-}
-
-function collectRisks(boards){
-  boardMap={};
-  boards.forEach(b=>{
-    const id=b._id||b.id||'';
-    const title=b.title||b.name||'未命名项目';
-    if(id){
-      boardMap[id]=title;
-      localStorage.setItem('yu_pmo_project_title_' + id, title);
-    }
-  });
-
-  const ids=new Set(Object.keys(boardMap));
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i)||'';
-    if(k.startsWith('yu_pmo_risks_')) ids.add(k.slice('yu_pmo_risks_'.length));
-  }
-
-  allRisks=[];
-  ids.forEach(boardId=>{
-    let risks=[];
-    try{risks=JSON.parse(localStorage.getItem('yu_pmo_risks_'+boardId)||'[]')}catch(e){}
-    const cachedTitle=localStorage.getItem('yu_pmo_project_title_' + boardId);
-    const projectTitle=boardMap[boardId] || cachedTitle || '未知项目';
-    (Array.isArray(risks)?risks:[]).forEach((r,index)=>{
-      allRisks.push({...r,boardId,index,projectTitle});
-    });
-  });
-}
-
 function populateProjectFilter(){
   const f=document.getElementById('projectFilter');
   const current=f.value;
-  const projects=[...new Set(allRisks.map(r=>r.projectTitle))].sort();
+  const projects=[...new Set(allRisks.map(r=>r.project_name))].filter(Boolean).sort();
   f.innerHTML='<option value="">全部项目</option>'+projects.map(p=>'<option value="'+esc(p)+'">'+esc(p)+'</option>').join('');
   f.value=current;
 }
@@ -158,8 +117,8 @@ function render(){
   const sf=document.getElementById('statusFilter').value;
 
   const filtered=allRisks.filter(r=>{
-    const blob=((r.title||'')+' '+(r.projectTitle||'')+' '+(r.owner||'')).toLowerCase();
-    return (!q||blob.includes(q))&&(!pf||r.projectTitle===pf)&&(!lf||r.level===lf)&&(!sf||r.status===sf);
+    const blob=((r.title||'')+' '+(r.project_name||'')+' '+(r.owner||'')).toLowerCase();
+    return (!q||blob.includes(q))&&(!pf||r.project_name===pf)&&(!lf||r.level===lf)&&(!sf||r.status===sf);
   });
 
   document.getElementById('allCount').textContent=allRisks.length;
@@ -168,21 +127,26 @@ function render(){
   document.getElementById('closedCount').textContent=allRisks.filter(r=>r.status==='closed').length;
 
   document.getElementById('riskRows').innerHTML=filtered.map(r=>{
-    const url='project.html?boardId='+encodeURIComponent(r.boardId)+'&title='+encodeURIComponent(r.projectTitle)+'&tab=risks';
+    const url='project.html?projectId='+encodeURIComponent(r.project_id)+
+      '&boardId='+encodeURIComponent(r.wekan_board_id||'')+
+      '&title='+encodeURIComponent(r.project_name||'未知项目')+'&tab=risks';
     return '<tr>'+
       '<td class="risk-title">'+esc(r.title||'未命名风险')+'</td>'+
-      '<td><a class="project-link" href="'+url+'">'+esc(r.projectTitle)+'</a></td>'+
+      '<td><a class="project-link" href="'+url+'">'+esc(r.project_name||'未知项目')+'</a></td>'+
       '<td><span class="pill '+riskLevelClass(r.level)+'">'+riskLevelText(r.level)+'</span></td>'+
       '<td>'+esc(r.owner||'未设置')+'</td>'+
       '<td><span class="pill status">'+riskStatusText(r.status)+'</span></td>'+
-      '<td>'+fmtDate(r.createdAt)+'</td>'+
+      '<td>'+fmtDate(r.created_at)+'</td>'+
       '<td><a class="project-link" href="'+url+'">进入项目处理</a></td>'+
     '</tr>';
   }).join('');
 
-  document.getElementById('emptyState').style.display=filtered.length?'none':'';
-  if(allRisks.length && !filtered.length){
-    document.getElementById('emptyState').innerHTML='<strong>没有符合筛选条件的风险</strong>请调整筛选条件。';
+  const empty=document.getElementById('emptyState');
+  empty.style.display=filtered.length?'none':'';
+  if(!allRisks.length){
+    empty.innerHTML='<strong>还没有风险数据</strong>请先在具体项目的“风险问题”页新增真实风险。';
+  }else if(!filtered.length){
+    empty.innerHTML='<strong>没有符合筛选条件的风险</strong>请调整筛选条件。';
   }
 }
 
@@ -191,8 +155,14 @@ function render(){
 });
 
 (async function init(){
-  const boards=await loadBoards();
-  collectRisks(boards);
+  try{
+    const res=await fetch('/api/risks');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    allRisks=await res.json();
+  }catch(e){
+    allRisks=[];
+    document.getElementById('emptyState').innerHTML='<strong>PMO 数据库暂时不可用</strong>请稍后刷新。';
+  }
   populateProjectFilter();
   render();
 })();
