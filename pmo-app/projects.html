@@ -14,6 +14,12 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
 .detail-grid{display:grid;grid-template-columns:1.4fr .8fr;gap:16px}.stack{display:grid;gap:16px}.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:16px;background:#fff;overflow:hidden;margin-bottom:16px}.summary{padding:18px;border-right:1px solid var(--line)}.summary:last-child{border-right:none}.summary span{display:block;color:var(--muted);font-size:11px}.summary strong{display:block;font-size:20px;margin-top:10px}.tabs{display:flex;gap:6px;margin:14px 0 18px;overflow:auto}.tab{padding:8px 11px;border-radius:9px;text-decoration:none;color:#6a717c;font-size:12px;white-space:nowrap}.tab.active{background:#fff;border:1px solid var(--line);color:#20242b;box-shadow:0 4px 12px rgba(31,35,41,.04)}.list{display:grid;gap:10px}.item{padding:13px 14px;background:#fbfbfc;border:1px solid #eef0f2;border-radius:13px}.item strong{font-size:12px}.item span{display:block;color:var(--muted);font-size:11px;line-height:1.55;margin-top:5px}.back{display:inline-flex;margin-bottom:16px;color:#6d7480;text-decoration:none;font-size:12px}
 @media(max-width:1000px){.detail-grid{grid-template-columns:1fr}.summary-grid{grid-template-columns:repeat(2,1fr)}.summary:nth-child(2){border-right:none}.summary:nth-child(-n+2){border-bottom:1px solid var(--line)}}
 @media(max-width:820px){.app{grid-template-columns:1fr}.sidebar{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}.nav{display:flex;gap:4px;overflow:auto}.nav-title{display:none}.nav a{white-space:nowrap}main{padding:20px}}
+
+.connect-card{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;margin-bottom:14px;border:1px solid #e7eaf0;background:#fbfcff;border-radius:14px}
+.connect-card.ok{background:#f8fcfa;border-color:#dfeee7}.connect-left{display:flex;align-items:center;gap:11px}.connect-dot{width:9px;height:9px;border-radius:50%;background:#c0c5cd;box-shadow:0 0 0 4px #f1f2f4}.connect-card.ok .connect-dot{background:var(--success);box-shadow:0 0 0 4px #e9f6f0}.connect-title{font-size:12px;font-weight:750}.connect-desc{font-size:11px;color:var(--muted);margin-top:3px}
+.project-link{color:#20242b;text-decoration:none;font-weight:700}.project-link:hover{color:var(--accent)}
+.state{display:inline-flex;align-items:center;gap:6px}.state i{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.modal-mask{display:none;position:fixed;inset:0;background:rgba(26,29,34,.28);backdrop-filter:blur(4px);z-index:50;align-items:center;justify-content:center;padding:18px}.modal-mask.show{display:flex}.modal{width:min(420px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 22px 70px rgba(31,35,41,.18);padding:22px}.modal h2{font-size:18px;margin:0 0 5px}.modal p{font-size:11px;color:var(--muted);line-height:1.6;margin:0 0 18px}.field{margin:12px 0}.field label{display:block;font-size:11px;color:#626974;margin-bottom:6px}.field input{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:13px;outline:none}.field input:focus{border-color:#b9c4ff;box-shadow:0 0 0 3px #f0f3ff}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.error{display:none;margin-top:10px;padding:9px 10px;border-radius:9px;background:#fff4f4;color:#b74d4d;font-size:11px}.error.show{display:block}.loading{padding:30px 12px;text-align:center;color:#8f959e;font-size:12px}
 </style></head>
 <body><div class="app">
 <aside class="sidebar">
@@ -34,7 +40,15 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
 <main>
   <div class="topbar">
     <div><div class="eyebrow">Project Center</div><h1>项目中心</h1><div class="subtitle">统一查看项目状态、阶段、进度、风险、投入与回款。</div></div>
-    <div class="actions"><a class="btn" href="http://localhost:3000" target="_blank">打开 Wekan</a><a class="btn primary" href="project.html">查看单项目结构</a></div>
+    <div class="actions"><a class="btn" href="http://localhost:3000" target="_blank">打开 Wekan</a><button class="btn primary" id="connectBtn">连接 Wekan</button></div>
+  </div>
+
+  <div class="connect-card" id="connectCard">
+    <div class="connect-left">
+      <span class="connect-dot"></span>
+      <div><div class="connect-title" id="connectTitle">Wekan 尚未连接</div><div class="connect-desc" id="connectDesc">连接后自动读取你有权限查看的看板，不需要重复录入项目。</div></div>
+    </div>
+    <button class="btn" id="refreshBtn" style="display:none">刷新项目</button>
   </div>
 
   <section class="panel">
@@ -48,10 +62,161 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
     </div>
     <div style="overflow:auto">
       <table>
-        <thead><tr><th>项目</th><th>客户</th><th>项目经理</th><th>当前阶段</th><th>计划进度</th><th>实际进度</th><th>投入</th><th>回款</th><th>风险</th><th>健康度</th></tr></thead>
-        <tbody></tbody>
+        <thead><tr><th>项目</th><th>状态</th><th>客户</th><th>项目经理</th><th>当前阶段</th><th>计划进度</th><th>实际进度</th><th>投入</th><th>回款</th><th>风险</th><th>健康度</th></tr></thead>
+        <tbody id="projectRows"></tbody>
       </table>
     </div>
-    <div class="empty"><strong>还没有同步项目</strong>下一步接入 Wekan 后，这里会自动形成项目清单，不需要重复录入。</div>
+    <div class="empty" id="emptyState"><strong>还没有同步项目</strong>点击右上角“连接 Wekan”，项目看板会自动出现在这里。</div>
   </section>
-</main></div></body></html>
+</main></div>
+
+<div class="modal-mask" id="loginModal">
+  <div class="modal">
+    <h2>连接 Wekan</h2>
+    <p>请输入你本机 Wekan 的登录账号。账号密码只用于向本机 Wekan 换取临时访问 Token，不会写入代码或 GitHub。</p>
+    <form id="loginForm">
+      <div class="field"><label>用户名或邮箱</label><input id="username" autocomplete="username" required placeholder="请输入 Wekan 用户名或邮箱"></div>
+      <div class="field"><label>密码</label><input id="password" type="password" autocomplete="current-password" required placeholder="请输入 Wekan 密码"></div>
+      <div class="error" id="loginError"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="cancelBtn">取消</button>
+        <button type="submit" class="btn primary" id="loginBtn">连接</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const TOKEN_KEY = 'yu_wekan_token';
+const USER_KEY = 'yu_wekan_user_id';
+const EXPIRES_KEY = 'yu_wekan_token_expires';
+
+function esc(value){
+  return String(value ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s]));
+}
+function openModal(){
+  $('loginError').classList.remove('show');
+  $('loginModal').classList.add('show');
+  setTimeout(()=>$('username').focus(),50);
+}
+function closeModal(){ $('loginModal').classList.remove('show'); }
+function setConnected(ok, count){
+  $('connectCard').classList.toggle('ok', ok);
+  $('connectTitle').textContent = ok ? 'Wekan 已连接' : 'Wekan 尚未连接';
+  $('connectDesc').textContent = ok
+    ? '已同步 ' + (count ?? 0) + ' 个可见看板；Wekan 继续作为项目执行层。'
+    : '连接后自动读取你有权限查看的看板，不需要重复录入项目。';
+  $('connectBtn').textContent = ok ? '重新连接' : '连接 Wekan';
+  $('refreshBtn').style.display = ok ? '' : 'none';
+}
+function tokenExpired(){
+  const expires = sessionStorage.getItem(EXPIRES_KEY);
+  if(!expires) return false;
+  const t = new Date(expires).getTime();
+  return Number.isFinite(t) && t <= Date.now();
+}
+function clearSession(){
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(USER_KEY);
+  sessionStorage.removeItem(EXPIRES_KEY);
+}
+function normaliseBoards(data){
+  if(Array.isArray(data)) return data;
+  if(Array.isArray(data?.boards)) return data.boards;
+  if(Array.isArray(data?.data)) return data.data;
+  return [];
+}
+function renderBoards(boards){
+  const active = boards.filter(b => !b.archived && (b.type === undefined || b.type === 'board'));
+  $('projectRows').innerHTML = active.map(b => {
+    const id = encodeURIComponent(b._id || b.id || '');
+    const title = esc(b.title || b.name || '未命名项目');
+    const url = 'project.html?boardId=' + id + '&title=' + encodeURIComponent(b.title || b.name || '');
+    return '<tr>' +
+      '<td><a class="project-link" href="' + url + '">' + title + '</a></td>' +
+      '<td><span class="state"><i></i>执行中</span></td>' +
+      '<td><span class="badge">待接入</span></td>' +
+      '<td><span class="badge">待映射</span></td>' +
+      '<td><span class="badge">待映射</span></td>' +
+      '<td>--</td><td>--</td>' +
+      '<td><span class="badge">RBC待接入</span></td>' +
+      '<td><span class="badge">RBC待接入</span></td>' +
+      '<td>--</td><td>--</td>' +
+    '</tr>';
+  }).join('');
+  $('emptyState').style.display = active.length ? 'none' : '';
+  if(!active.length){
+    $('emptyState').innerHTML = '<strong>当前没有可同步的 Wekan 看板</strong>你可以先在 Wekan 新建一个项目看板，再回这里刷新。';
+  }
+  setConnected(true, active.length);
+}
+async function loadBoards(){
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  const userId = sessionStorage.getItem(USER_KEY);
+  if(!token || !userId || tokenExpired()){
+    clearSession();
+    setConnected(false);
+    return;
+  }
+  $('emptyState').style.display = '';
+  $('emptyState').innerHTML = '<div class="loading">正在读取 Wekan 项目…</div>';
+  try{
+    const res = await fetch('/wekan/api/users/' + encodeURIComponent(userId) + '/boards', {
+      headers:{'Authorization':'Bearer ' + token}
+    });
+    if(res.status === 401 || res.status === 403){
+      clearSession();
+      setConnected(false);
+      $('emptyState').innerHTML = '<strong>Wekan 登录已失效</strong>请重新连接。';
+      return;
+    }
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    renderBoards(normaliseBoards(data));
+  }catch(err){
+    setConnected(false);
+    $('emptyState').style.display = '';
+    $('emptyState').innerHTML = '<strong>暂时无法读取 Wekan 项目</strong>请确认 Wekan 正常运行，然后重新连接。';
+  }
+}
+$('connectBtn').addEventListener('click', openModal);
+$('cancelBtn').addEventListener('click', closeModal);
+$('loginModal').addEventListener('click', (e)=>{ if(e.target === $('loginModal')) closeModal(); });
+$('refreshBtn').addEventListener('click', loadBoards);
+$('loginForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const identity = $('username').value.trim();
+  const password = $('password').value;
+  const error = $('loginError');
+  error.classList.remove('show');
+  $('loginBtn').disabled = true;
+  $('loginBtn').textContent = '连接中…';
+  try{
+    const body = identity.includes('@') ? {email:identity,password} : {username:identity,password};
+    const res = await fetch('/wekan/users/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok || !data.token || !data.id){
+      throw new Error(data.reason || data.error || '账号或密码不正确');
+    }
+    sessionStorage.setItem(TOKEN_KEY,data.token);
+    sessionStorage.setItem(USER_KEY,data.id);
+    if(data.tokenExpires) sessionStorage.setItem(EXPIRES_KEY,data.tokenExpires);
+    $('password').value = '';
+    closeModal();
+    await loadBoards();
+  }catch(err){
+    error.textContent = '连接失败：' + (err.message || '请检查账号、密码和 Wekan 是否正常运行');
+    error.classList.add('show');
+  }finally{
+    $('loginBtn').disabled = false;
+    $('loginBtn').textContent = '连接';
+  }
+});
+loadBoards();
+</script>
+</body></html>
