@@ -228,6 +228,7 @@ def require_project(session, project_id: str) -> Project:
 
 
 @app.get("/health")
+@app.get("/api/health")
 def health():
     return {"ok": True, "service": "yu-pmo-api", "version": "0.2.0"}
 
