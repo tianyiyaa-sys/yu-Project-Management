@@ -61,8 +61,6 @@ services:
       dockerfile: Dockerfile.pmo
     container_name: yu-pmo-app
     restart: always
-    depends_on:
-      - pmo-api
     ports:
       - "3100:80"
     networks:
