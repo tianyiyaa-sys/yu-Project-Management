@@ -135,6 +135,13 @@ class StageOut(StageIn):
     created_at: datetime
 
 
+class StagePatch(BaseModel):
+    status: Optional[str] = None
+    name: Optional[str] = None
+    planned_due_date: Optional[date] = None
+    sort_order: Optional[int] = None
+
+
 class RiskIn(BaseModel):
     title: str
     level: str = "mid"
@@ -149,6 +156,14 @@ class RiskOut(RiskIn):
     id: str
     project_id: str
     created_at: datetime
+
+
+class RiskPatch(BaseModel):
+    title: Optional[str] = None
+    level: Optional[str] = None
+    owner: Optional[str] = None
+    status: Optional[str] = None
+    due_date: Optional[date] = None
 
 
 class MaterialIn(BaseModel):
@@ -179,6 +194,15 @@ class DecisionOut(DecisionIn):
     id: str
     project_id: str
     created_at: datetime
+
+
+class DecisionPatch(BaseModel):
+    meeting_name: Optional[str] = None
+    meeting_date: Optional[date] = None
+    decision: Optional[str] = None
+    owner: Optional[str] = None
+    due_date: Optional[date] = None
+    status: Optional[str] = None
 
 
 class LegacyStage(BaseModel):
@@ -298,6 +322,19 @@ def create_stage(project_id: str, payload: StageIn):
         return item
 
 
+@app.patch("/api/stages/{item_id}", response_model=StageOut)
+def update_stage(item_id: str, payload: StagePatch):
+    with SessionLocal() as session:
+        item = session.get(Stage, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Stage not found")
+        for key, value in payload.model_dump(exclude_unset=True).items():
+            setattr(item, key, value)
+        session.commit()
+        session.refresh(item)
+        return item
+
+
 @app.delete("/api/stages/{item_id}")
 def delete_stage(item_id: str):
     with SessionLocal() as session:
@@ -324,6 +361,19 @@ def create_risk(project_id: str, payload: RiskIn):
         require_project(session, project_id)
         item = Risk(id=str(uuid.uuid4()), project_id=project_id, **payload.model_dump())
         session.add(item)
+        session.commit()
+        session.refresh(item)
+        return item
+
+
+@app.patch("/api/risks/{item_id}", response_model=RiskOut)
+def update_risk(item_id: str, payload: RiskPatch):
+    with SessionLocal() as session:
+        item = session.get(Risk, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Risk not found")
+        for key, value in payload.model_dump(exclude_unset=True).items():
+            setattr(item, key, value)
         session.commit()
         session.refresh(item)
         return item
@@ -386,6 +436,19 @@ def create_decision(project_id: str, payload: DecisionIn):
         require_project(session, project_id)
         item = Decision(id=str(uuid.uuid4()), project_id=project_id, **payload.model_dump())
         session.add(item)
+        session.commit()
+        session.refresh(item)
+        return item
+
+
+@app.patch("/api/decisions/{item_id}", response_model=DecisionOut)
+def update_decision(item_id: str, payload: DecisionPatch):
+    with SessionLocal() as session:
+        item = session.get(Decision, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Decision not found")
+        for key, value in payload.model_dump(exclude_unset=True).items():
+            setattr(item, key, value)
         session.commit()
         session.refresh(item)
         return item
