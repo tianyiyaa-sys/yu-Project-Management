@@ -257,8 +257,8 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
 </main></div>
 <script>
 const params = new URLSearchParams(location.search);
-const title = params.get('title');
-const boardId = params.get('boardId');
+let title = params.get('title') || '';
+let boardId = params.get('boardId') || '';
 let projectId = params.get('projectId') || (boardId ? localStorage.getItem('yu_pmo_project_id_' + boardId) : '') || '';
 const tab = params.get('tab') || 'overview';
 const token = sessionStorage.getItem('yu_wekan_token');
@@ -288,19 +288,31 @@ function projectUrl(nextTab){
   return 'project.html?' + p.toString();
 }
 
-document.getElementById('tabOverview').href = projectUrl('overview');
-document.getElementById('tabTasks').href = projectUrl('tasks');
-document.getElementById('tabStages').href = projectUrl('stages');
-document.getElementById('tabRisks').href = projectUrl('risks');
-document.getElementById('tabMaterials').href = projectUrl('materials');
-document.getElementById('tabMeetings').href = projectUrl('meetings');
+function applyProjectContext(){
+  document.getElementById('tabOverview').href = projectUrl('overview');
+  document.getElementById('tabTasks').href = projectUrl('tasks');
+  document.getElementById('tabStages').href = projectUrl('stages');
+  document.getElementById('tabRisks').href = projectUrl('risks');
+  document.getElementById('tabMaterials').href = projectUrl('materials');
+  document.getElementById('tabMeetings').href = projectUrl('meetings');
 
-if(title){
-  if(boardId) localStorage.setItem('yu_pmo_project_title_' + boardId, title);
-  document.getElementById('projectTitle').textContent = title;
-  document.title = title + ' - 雨诺项目工作台';
-  document.getElementById('projectSubtitle').textContent = 'Wekan 项目已关联；经营与风险数据按接入进度逐步补齐。';
+  if(title){
+    if(boardId) localStorage.setItem('yu_pmo_project_title_' + boardId, title);
+    if(projectId) localStorage.setItem('yu_pmo_last_project_id', projectId);
+    document.getElementById('projectTitle').textContent = title;
+    document.title = title + ' - 雨诺项目工作台';
+    document.getElementById('projectSubtitle').textContent = boardId
+      ? '项目已关联 Wekan 执行空间；经营与风险数据按接入进度逐步补齐。'
+      : 'PMO 项目已恢复；执行空间待关联。';
+
+    const url = new URL(location.href);
+    if(projectId) url.searchParams.set('projectId', projectId);
+    if(boardId) url.searchParams.set('boardId', boardId);
+    if(title) url.searchParams.set('title', title);
+    history.replaceState(null,'',url);
+  }
 }
+applyProjectContext();
 
 
 ['overviewView','tasksView','stagesView','risksView','materialsView','meetingsView'].forEach(id=>document.getElementById(id).classList.add('view-hidden'));
@@ -327,24 +339,50 @@ if(tab === 'tasks'){
 }
 
 async function resolveProjectIdentity(){
-  if(projectId){
-    if(boardId) localStorage.setItem('yu_pmo_project_id_' + boardId, projectId);
-    return projectId;
-  }
-  if(!boardId) return '';
   try{
-    let res = await fetch('/api/projects/by-wekan/' + encodeURIComponent(boardId));
-    if(res.status === 404 && title){
-      res = await fetch('/api/projects/sync-wekan',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({board_id:boardId,name:title})
-      });
+    let data=null;
+
+    if(projectId){
+      const res=await fetch('/api/projects/' + encodeURIComponent(projectId));
+      if(res.ok) data=await res.json();
     }
-    if(!res.ok) return '';
-    const data = await res.json();
-    projectId = data.id || '';
-    if(projectId) localStorage.setItem('yu_pmo_project_id_' + boardId, projectId);
+
+    if(!data && boardId){
+      let res=await fetch('/api/projects/by-wekan/' + encodeURIComponent(boardId));
+      if(res.status===404 && title){
+        res=await fetch('/api/projects/sync-wekan',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({board_id:boardId,name:title})
+        });
+      }
+      if(res.ok) data=await res.json();
+    }
+
+    if(!data && !boardId){
+      const res=await fetch('/api/projects');
+      if(res.ok){
+        const projects=await res.json();
+        if(Array.isArray(projects) && projects.length){
+          const lastId=localStorage.getItem('yu_pmo_last_project_id');
+          data=projects.find(p=>p.id===lastId) || (projects.length===1 ? projects[0] : null);
+          if(!data && projects.length>1){
+            location.replace('projects.html');
+            return '';
+          }
+        }
+      }
+    }
+
+    if(!data) return '';
+
+    projectId=data.id || projectId;
+    boardId=data.wekan_board_id || boardId || '';
+    title=data.name || title || '';
+
+    if(boardId && projectId) localStorage.setItem('yu_pmo_project_id_' + boardId, projectId);
+    if(projectId) localStorage.setItem('yu_pmo_last_project_id', projectId);
+    applyProjectContext();
     return projectId;
   }catch(e){
     return '';
@@ -354,8 +392,6 @@ async function resolveProjectIdentity(){
 async function migrateLegacyProjectData(){
   const pid = await resolveProjectIdentity();
   if(!pid || !boardId) return;
-  const markerKey='yu_pmo_db_migration_done_' + pid;
-  if(localStorage.getItem(markerKey)==='1') return;
 
   const read=(type)=>{
     try{return JSON.parse(localStorage.getItem('yu_pmo_' + type + '_' + boardId) || '[]')}catch(e){return []}
@@ -366,15 +402,18 @@ async function migrateLegacyProjectData(){
     materials:read('materials'),
     decisions:read('meetings')
   };
+
+  const hasLegacyData=payload.stages.length||payload.risks.length||payload.materials.length||payload.decisions.length;
+  if(!hasLegacyData) return;
+
   try{
-    const res=await fetch('/api/projects/' + encodeURIComponent(pid) + '/migrate-local',{
+    await fetch('/api/projects/' + encodeURIComponent(pid) + '/migrate-local',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)
     });
-    if(res.ok) localStorage.setItem(markerKey,'1');
   }catch(e){
-    // Keep local data untouched; migration can retry next time.
+    // Old browser data remains untouched and can retry next time.
   }
 }
 
