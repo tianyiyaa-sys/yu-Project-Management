@@ -154,37 +154,46 @@ async function ensurePmoProject(boardId, name){
 }
 async function renderBoards(boards){
   const active = boards.filter(b => !b.archived && (b.type === undefined || b.type === 'board'));
-  const rows = await Promise.all(active.map(async b => {
+
+  await Promise.all(active.map(async b=>{
+    const rawId=b._id||b.id||'';
+    const rawTitle=b.title||b.name||'未命名项目';
+    localStorage.setItem('yu_pmo_project_title_' + rawId, rawTitle);
+    await ensurePmoProject(rawId,rawTitle);
+  }));
+
+  let summaries=[];
+  try{
+    const res=await fetch('/api/project-summaries');
+    if(res.ok) summaries=await res.json();
+  }catch(e){}
+  const summaryMap=new Map((Array.isArray(summaries)?summaries:[]).map(x=>[x.wekan_board_id,x]));
+
+  $('projectRows').innerHTML = active.map(b => {
     const rawId = b._id || b.id || '';
     const id = encodeURIComponent(rawId);
     const rawTitle = b.title || b.name || '未命名项目';
     const title = esc(rawTitle);
-    localStorage.setItem('yu_pmo_project_title_' + rawId, rawTitle);
-
-    const pmoProject = await ensurePmoProject(rawId, rawTitle);
-    const projectId = pmoProject?.id || localStorage.getItem('yu_pmo_project_id_' + rawId) || '';
+    const summary=summaryMap.get(rawId);
+    const projectId=summary?.project_id || localStorage.getItem('yu_pmo_project_id_' + rawId) || '';
     const url = 'project.html?projectId=' + encodeURIComponent(projectId) + '&boardId=' + id + '&title=' + encodeURIComponent(rawTitle);
-
-    const stages = loadLocal('stages', rawId);
-    const risks = loadLocal('risks', rawId);
-    const currentStage = currentStageFrom(stages);
-    const highRiskCount = risks.filter(r=>r.level==='high' && r.status!=='closed').length;
+    const currentStage=summary?.current_stage;
+    const highRiskCount=Number(summary?.high_risk_count||0);
 
     return '<tr>' +
       '<td><a class="project-link" href="' + url + '">' + title + '</a></td>' +
       '<td><span class="state"><i></i>执行中</span></td>' +
-      '<td><span class="badge">待接入</span></td>' +
-      '<td><span class="badge">待映射</span></td>' +
-      '<td>' + (currentStage ? esc(currentStage.name) : '<span class="badge">待录入</span>') + '</td>' +
+      '<td>' + (summary?.customer ? esc(summary.customer) : '<span class="badge">待接入</span>') + '</td>' +
+      '<td>' + (summary?.manager ? esc(summary.manager) : '<span class="badge">待设置</span>') + '</td>' +
+      '<td>' + (currentStage ? esc(currentStage) : '<span class="badge">待录入</span>') + '</td>' +
       '<td>--</td><td>--</td>' +
       '<td><span class="badge">RBC待接入</span></td>' +
       '<td><span class="badge">RBC待接入</span></td>' +
       '<td>' + (highRiskCount ? '<span class="badge danger">高风险 ' + highRiskCount + '</span>' : '--') + '</td>' +
       '<td>--</td>' +
     '</tr>';
-  }));
+  }).join('');
 
-  $('projectRows').innerHTML = rows.join('');
   $('emptyState').style.display = active.length ? 'none' : '';
   if(!active.length){
     $('emptyState').innerHTML = '<strong>当前没有可同步的 Wekan 看板</strong>你可以先在 Wekan 新建一个项目看板，再回这里刷新。';
