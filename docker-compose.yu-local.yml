@@ -3,12 +3,13 @@ services:
     image: yu-project-management:local
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.yu-cn
     ports: !override
       - "3000:8080"
     environment:
       ROOT_URL: http://localhost:3000
 
   ferretdb:
+    image: docker.m.daocloud.io/library/debian:bookworm-slim
     ports: !override
       - "127.0.0.1:27017:27017"
