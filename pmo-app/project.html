@@ -259,6 +259,7 @@ table{width:100%;border-collapse:collapse;min-width:860px}th{text-align:left;pad
 const params = new URLSearchParams(location.search);
 const title = params.get('title');
 const boardId = params.get('boardId');
+let projectId = params.get('projectId') || (boardId ? localStorage.getItem('yu_pmo_project_id_' + boardId) : '') || '';
 const tab = params.get('tab') || 'overview';
 const token = sessionStorage.getItem('yu_wekan_token');
 
@@ -280,6 +281,7 @@ function normaliseArray(data){
 }
 function projectUrl(nextTab){
   const p = new URLSearchParams();
+  if(projectId) p.set('projectId',projectId);
   if(boardId) p.set('boardId',boardId);
   if(title) p.set('title',title);
   if(nextTab && nextTab !== 'overview') p.set('tab',nextTab);
@@ -322,6 +324,58 @@ if(tab === 'tasks'){
 }else{
   document.getElementById('overviewView').classList.remove('view-hidden');
   document.getElementById('tabOverview').classList.add('active');
+}
+
+async function resolveProjectIdentity(){
+  if(projectId){
+    if(boardId) localStorage.setItem('yu_pmo_project_id_' + boardId, projectId);
+    return projectId;
+  }
+  if(!boardId) return '';
+  try{
+    let res = await fetch('/api/projects/by-wekan/' + encodeURIComponent(boardId));
+    if(res.status === 404 && title){
+      res = await fetch('/api/projects/sync-wekan',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({board_id:boardId,name:title})
+      });
+    }
+    if(!res.ok) return '';
+    const data = await res.json();
+    projectId = data.id || '';
+    if(projectId) localStorage.setItem('yu_pmo_project_id_' + boardId, projectId);
+    return projectId;
+  }catch(e){
+    return '';
+  }
+}
+
+async function migrateLegacyProjectData(){
+  const pid = await resolveProjectIdentity();
+  if(!pid || !boardId) return;
+  const markerKey='yu_pmo_db_migration_done_' + pid;
+  if(localStorage.getItem(markerKey)==='1') return;
+
+  const read=(type)=>{
+    try{return JSON.parse(localStorage.getItem('yu_pmo_' + type + '_' + boardId) || '[]')}catch(e){return []}
+  };
+  const payload={
+    stages:read('stages'),
+    risks:read('risks'),
+    materials:read('materials'),
+    decisions:read('meetings')
+  };
+  try{
+    const res=await fetch('/api/projects/' + encodeURIComponent(pid) + '/migrate-local',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    if(res.ok) localStorage.setItem(markerKey,'1');
+  }catch(e){
+    // Keep local data untouched; migration can retry next time.
+  }
 }
 
 async function apiGet(path){
@@ -589,5 +643,6 @@ if(tab === 'risks') renderRisks();
 if(tab === 'materials') renderMaterials();
 if(tab === 'meetings') renderMeetings();
 if(tab === 'overview') updateOverview();
+migrateLegacyProjectData();
 </script>
 </body></html>
