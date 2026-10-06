@@ -143,7 +143,9 @@ function renderBoards(boards){
     const rawId = b._id || b.id || '';
     const id = encodeURIComponent(rawId);
     const title = esc(b.title || b.name || '未命名项目');
-    const url = 'project.html?boardId=' + id + '&title=' + encodeURIComponent(b.title || b.name || '');
+    const rawTitle = b.title || b.name || '未命名项目';
+    localStorage.setItem('yu_pmo_project_title_' + rawId, rawTitle);
+    const url = 'project.html?boardId=' + id + '&title=' + encodeURIComponent(rawTitle);
     const stages = loadLocal('stages', rawId);
     const risks = loadLocal('risks', rawId);
     const currentStage = currentStageFrom(stages);
