@@ -1,14 +1,14 @@
 @echo off
 setlocal
 chcp 65001 >nul
-title Yu PMO - Quick Update
+title Yu PMO - Architecture Update
 cd /d "%~dp0"
 
 echo ========================================
-echo   Yu PMO - Quick Update
+echo   Yu PMO - Update
 echo ========================================
 echo.
-echo This update only rebuilds the PMO workbench.
+echo This update rebuilds the PMO UI and PMO API.
 echo Wekan stays running and will not be rebuilt.
 echo.
 pause
@@ -18,13 +18,13 @@ set "ZIP=%TEMP%\yu-pmo-v1.zip"
 set "SRC=%WORK%\yu-Project-Management-yu-pmo-v1"
 
 echo.
-echo [1/5] Cleaning temporary files...
+echo [1/6] Cleaning temporary files...
 if exist "%WORK%" rmdir /s /q "%WORK%"
 if exist "%ZIP%" del /q "%ZIP%"
 mkdir "%WORK%" >nul 2>&1
 
 echo.
-echo [2/5] Downloading latest PMO code...
+echo [2/6] Downloading latest PMO code...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri 'https://github.com/tianyiyaa-sys/yu-Project-Management/archive/refs/heads/yu-pmo-v1.zip' -OutFile '%ZIP%'"
 if errorlevel 1 (
@@ -37,7 +37,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [3/5] Extracting...
+echo [3/6] Extracting...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "Expand-Archive -Path '%ZIP%' -DestinationPath '%WORK%' -Force"
 if errorlevel 1 (
@@ -50,9 +50,9 @@ if errorlevel 1 (
 )
 
 echo.
-echo [4/5] Rebuilding PMO only...
+echo [4/6] Building PMO services...
 pushd "%SRC%"
-docker compose -f docker-compose.yml -f docker-compose.yu-local.yml build pmo
+docker compose -f docker-compose.yml -f docker-compose.yu-local.yml build pmo-api pmo
 if errorlevel 1 (
   echo.
   echo ERROR: PMO build failed.
@@ -63,7 +63,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
-docker compose -f docker-compose.yml -f docker-compose.yu-local.yml up -d --no-deps pmo
+echo.
+echo [5/6] Starting PMO database, API and UI...
+docker compose -f docker-compose.yml -f docker-compose.yu-local.yml up -d pmo-db pmo-api pmo
 if errorlevel 1 (
   echo.
   echo ERROR: PMO startup failed.
@@ -75,12 +77,13 @@ if errorlevel 1 (
 )
 
 echo.
-echo [5/5] Done. Opening PMO workbench...
-timeout /t 2 /nobreak >nul
+echo [6/6] Done. Opening PMO workbench...
+timeout /t 3 /nobreak >nul
 start "" "http://localhost:3100"
 
 echo.
 echo PMO updated successfully.
+echo PMO API and database are now running locally.
 echo Wekan is still available at http://localhost:3000
 echo.
 popd
