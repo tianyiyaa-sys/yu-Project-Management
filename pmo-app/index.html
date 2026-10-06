@@ -434,71 +434,13 @@ const HOME_USER_KEY='yu_wekan_user_id';
 function homeEsc(value){
   return String(value ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s]));
 }
-function homeNormaliseBoards(data){
-  if(Array.isArray(data)) return data;
-  if(Array.isArray(data?.boards)) return data.boards;
-  if(Array.isArray(data?.data)) return data.data;
-  return [];
-}
-function homeLoadLocal(type,boardId){
-  try{return JSON.parse(localStorage.getItem('yu_pmo_'+type+'_'+boardId)||'[]')}catch(e){return []}
-}
-function homeCurrentStage(stages){
-  if(!Array.isArray(stages)||!stages.length) return null;
-  return stages.find(s=>s.status==='active')
-    || stages.find(s=>s.status==='pending')
-    || [...stages].reverse().find(s=>s.status==='done')
-    || stages[0];
-}
 function setHomeWekan(ok,text){
   const chip=document.getElementById('homeWekanChip');
   chip.classList.toggle('ok',ok);
   document.getElementById('homeWekanText').textContent=text;
 }
-function renderHomeBoards(boards){
-  const active=boards.filter(b=>!b.archived&&(b.type===undefined||b.type==='board'));
-  document.getElementById('homeProjectCount').textContent=active.length;
 
-  let highRiskProjects=0;
-  const riskAttention=[];
-  document.getElementById('homeProjectRows').innerHTML=active.map(b=>{
-    const boardId=b._id||b.id||'';
-    const title=b.title||b.name||'未命名项目';
-    const stages=homeLoadLocal('stages',boardId);
-    const risks=homeLoadLocal('risks',boardId);
-    const current=homeCurrentStage(stages);
-    const highRisks=risks.filter(r=>r.level==='high'&&r.status!=='closed');
-    if(highRisks.length){
-      highRiskProjects++;
-      riskAttention.push({boardId,title,risks:highRisks});
-    }
-    const url='project.html?boardId='+encodeURIComponent(boardId)+'&title='+encodeURIComponent(title);
-    return '<tr>'+
-      '<td><a class="project-link" href="'+url+'">'+homeEsc(title)+'</a></td>'+
-      '<td><span class="state running"><i></i>执行中</span></td>'+
-      '<td>'+(current?homeEsc(current.name):'<span class="placeholder">待录入</span>')+'</td>'+
-      '<td>--</td>'+
-      '<td><span class="placeholder">RBC待接入</span></td>'+
-      '<td><span class="placeholder">RBC待接入</span></td>'+
-      '<td>'+(highRisks.length?'<span class="badge danger">高风险 '+highRisks.length+'</span>':'--')+'</td>'+
-      '<td>--</td>'+
-    '</tr>';
-  }).join('');
-
-  document.getElementById('homeHighRiskCount').textContent=highRiskProjects;
-  document.getElementById('homeProjectEmpty').style.display=active.length?'none':'';
-
-  const riskBox=document.getElementById('homeRiskAttention');
-  riskBox.innerHTML=riskAttention.slice(0,5).map(p=>{
-    const first=p.risks[0];
-    const url='project.html?boardId='+encodeURIComponent(p.boardId)+'&title='+encodeURIComponent(p.title)+'&tab=risks';
-    return '<div class="attention">'+
-      '<div class="attention-top"><strong>'+homeEsc(p.title)+'</strong><span class="badge danger">高风险 '+p.risks.length+'</span></div>'+
-      '<span>'+homeEsc(first.title)+' · <a href="'+url+'" style="color:#4b6bfb;text-decoration:none">查看风险</a></span>'+
-    '</div>';
-  }).join('');
-}
-async function loadHome(){
+async function checkWekanStatus(){
   const token=sessionStorage.getItem(HOME_TOKEN_KEY);
   const userId=sessionStorage.getItem(HOME_USER_KEY);
   if(!token||!userId){
@@ -510,12 +452,76 @@ async function loadHome(){
       headers:{Authorization:'Bearer '+token}
     });
     if(!res.ok) throw new Error('HTTP '+res.status);
-    const boards=homeNormaliseBoards(await res.json());
     setHomeWekan(true,'Wekan 已连接');
-    renderHomeBoards(boards);
   }catch(e){
     setHomeWekan(false,'Wekan 连接失效');
-    document.getElementById('homeProjectEmpty').textContent='暂时无法读取 Wekan 项目，请回项目中心重新连接。';
+  }
+}
+
+async function loadHome(){
+  checkWekanStatus();
+
+  const empty=document.getElementById('homeProjectEmpty');
+  try{
+    const [summaryRes,riskRes]=await Promise.all([
+      fetch('/api/project-summaries'),
+      fetch('/api/risks')
+    ]);
+    if(!summaryRes.ok) throw new Error('SUMMARY_'+summaryRes.status);
+    const summaries=await summaryRes.json();
+    const risks=riskRes.ok ? await riskRes.json() : [];
+    const active=(Array.isArray(summaries)?summaries:[]).filter(x=>x.status!=='closed');
+
+    document.getElementById('homeProjectCount').textContent=active.length;
+    const highRiskProjects=active.filter(x=>Number(x.high_risk_count||0)>0);
+    document.getElementById('homeHighRiskCount').textContent=highRiskProjects.length;
+
+    document.getElementById('homeProjectRows').innerHTML=active.map(p=>{
+      const url='project.html?projectId='+encodeURIComponent(p.project_id)+
+        '&boardId='+encodeURIComponent(p.wekan_board_id||'')+
+        '&title='+encodeURIComponent(p.name||'未命名项目');
+      return '<tr>'+
+        '<td><a class="project-link" href="'+url+'">'+homeEsc(p.name||'未命名项目')+'</a></td>'+
+        '<td><span class="state running"><i></i>执行中</span></td>'+
+        '<td>'+(p.current_stage?homeEsc(p.current_stage):'<span class="placeholder">待录入</span>')+'</td>'+
+        '<td>--</td>'+
+        '<td><span class="placeholder">RBC待接入</span></td>'+
+        '<td><span class="placeholder">RBC待接入</span></td>'+
+        '<td>'+(Number(p.high_risk_count||0)>0?'<span class="badge danger">高风险 '+p.high_risk_count+'</span>':'--')+'</td>'+
+        '<td>--</td>'+
+      '</tr>';
+    }).join('');
+
+    empty.style.display=active.length?'none':'';
+    if(!active.length){
+      empty.textContent='还没有项目，请先进入项目中心创建或同步项目。';
+    }
+
+    const riskBox=document.getElementById('homeRiskAttention');
+    const riskMap=new Map();
+    (Array.isArray(risks)?risks:[]).forEach(r=>{
+      if(r.level==='high'&&r.status!=='closed'){
+        if(!riskMap.has(r.project_id)) riskMap.set(r.project_id,[]);
+        riskMap.get(r.project_id).push(r);
+      }
+    });
+
+    riskBox.innerHTML=highRiskProjects.slice(0,5).map(p=>{
+      const projectRisks=riskMap.get(p.project_id)||[];
+      const first=projectRisks[0];
+      const url='project.html?projectId='+encodeURIComponent(p.project_id)+
+        '&boardId='+encodeURIComponent(p.wekan_board_id||'')+
+        '&title='+encodeURIComponent(p.name||'未命名项目')+'&tab=risks';
+      return '<div class="attention">'+
+        '<div class="attention-top"><strong>'+homeEsc(p.name||'未命名项目')+'</strong><span class="badge danger">高风险 '+p.high_risk_count+'</span></div>'+
+        '<span>'+(first?homeEsc(first.title):'存在未关闭高风险')+' · <a href="'+url+'" style="color:#4b6bfb;text-decoration:none">查看风险</a></span>'+
+      '</div>';
+    }).join('');
+  }catch(e){
+    document.getElementById('homeProjectCount').textContent='--';
+    document.getElementById('homeHighRiskCount').textContent='--';
+    empty.style.display='';
+    empty.textContent='PMO 数据库暂时不可用，请稍后刷新。';
   }
 }
 loadHome();
