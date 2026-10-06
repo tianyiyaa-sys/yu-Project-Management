@@ -8,6 +8,7 @@ template(name="yuPmoOverview")
       .yu-pmo-overview__status
         span.yu-pmo-status-dot
         | Wekan 已连接
+
     .yu-pmo-kpis
       .yu-pmo-kpi
         span.yu-pmo-kpi__label 当前项目
@@ -16,7 +17,7 @@ template(name="yuPmoOverview")
       .yu-pmo-kpi
         span.yu-pmo-kpi__label 高风险项目
         strong.yu-pmo-kpi__value --
-        span.yu-pmo-kpi__hint 风险中心接入后计算
+        span.yu-pmo-kpi__hint 风险规则待接入
       .yu-pmo-kpi
         span.yu-pmo-kpi__label 合同 / 回款
         strong.yu-pmo-kpi__value --
@@ -25,17 +26,54 @@ template(name="yuPmoOverview")
         span.yu-pmo-kpi__label 已投入人天
         strong.yu-pmo-kpi__value --
         span.yu-pmo-kpi__hint RBC 待接入
+
+    .yu-pmo-section
+      .yu-pmo-section__head
+        div
+          strong 项目经营视图
+          span  当前先展示 Wekan 中真实项目；经营字段接入 RBC 后自动补齐
+      if yuProjects.length
+        .yu-pmo-table-wrap
+          table.yu-pmo-table
+            thead
+              tr
+                th 项目
+                th 状态
+                th 阶段
+                th 风险
+                th 投入
+                th 回款
+            tbody
+              each yuProjects
+                tr
+                  td
+                    strong= title
+                  td
+                    span.yu-pmo-tag.yu-pmo-tag--running 执行中
+                  td
+                    span.yu-pmo-placeholder 待配置
+                  td
+                    span.yu-pmo-placeholder 待计算
+                  td
+                    span.yu-pmo-placeholder RBC待接入
+                  td
+                    span.yu-pmo-placeholder RBC待接入
+      else
+        .yu-pmo-empty
+          i.fa.fa-folder-open-o
+          span 还没有项目。先在下方新建一个 Wekan 看板，它会自动进入项目经营视图。
+
     .yu-pmo-focus
       .yu-pmo-focus__head
         strong 今日关注
-        span 第一版先建立统一项目视图，后续自动显示延期、超投入和高风险项目。
+        span V0.1 先建立统一项目数据入口
       .yu-pmo-focus__items
         .yu-pmo-focus__item
           i.fa.fa-tasks
-          span 项目执行数据已使用 Wekan 作为唯一来源
+          span 项目执行数据直接读取 Wekan，不重复录入
         .yu-pmo-focus__item
           i.fa.fa-database
           span RBC 接入后自动补充合同、回款和工时
         .yu-pmo-focus__item
           i.fa.fa-magic
-          span 小雨将基于真实项目数据生成诊断和下一步建议
+          span 小雨后续基于真实项目数据生成诊断、预警和下一步建议
