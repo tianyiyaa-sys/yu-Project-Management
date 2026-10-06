@@ -20,3 +20,15 @@ services:
     image: docker.m.daocloud.io/library/debian:bookworm-slim
     ports: !override
       - "127.0.0.1:27017:27017"
+
+  pmo:
+    image: yu-project-management-pmo:local
+    build:
+      context: .
+      dockerfile: Dockerfile.pmo
+    container_name: yu-pmo-app
+    restart: always
+    ports:
+      - "3100:80"
+    networks:
+      - wekan-tier
